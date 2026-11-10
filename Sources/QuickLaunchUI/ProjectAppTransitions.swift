@@ -30,7 +30,7 @@ final class ProjectAppTransitions {
         restoreOnCancel = nil
     }
 
-    func toggle(_ application: Application, anchor: CGRect, previousFrontmost: NSRunningApplication?, completion: @escaping () -> Void) {
+    func toggle(_ application: Application, anchor: CGRect, previousFrontmost: NSRunningApplication?, opened: @escaping () -> Void, completion: @escaping () -> Void) {
         guard task == nil else { return }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // This path only runs after a deliberate project-logo click, never at startup.
@@ -86,7 +86,7 @@ final class ProjectAppTransitions {
                     }
                     try Task.checkCancellation()
                     _ = target.unhide()
-                    _ = target.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                    if target.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { opened() }
                 }
             } catch is CancellationError {
                 // Cancellation never steals focus back. If a launch already began,

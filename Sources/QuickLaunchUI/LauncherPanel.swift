@@ -38,6 +38,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private var previousFrontmost: NSRunningApplication?
     private var presentationID = UUID()
     private let projectTransitions = ProjectAppTransitions()
+    private let openHistory = ApplicationOpenHistory()
     var onLaunch: ((Application) -> Void)?
 
     public override init() {
@@ -263,7 +264,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func updateResults() {
-        matches = AppSearch.results(for: field.stringValue, in: applications, limit: applications.count)
+        matches = AppSearch.results(for: field.stringValue, in: applications, limit: applications.count, openCounts: openHistory.counts)
         emptySearchDrag.isHidden = !field.stringValue.isEmpty
         selected = max(0, min(selected, matches.count - 1))
         drawRows()
@@ -379,7 +380,9 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         let application = projectApplications[sender.tag]
         let anchor = panel.convertToScreen(sender.convert(sender.bounds, to: nil))
         let opening = presentationID
-        projectTransitions.toggle(application, anchor: anchor, previousFrontmost: previousFrontmost) { [weak self] in
+        projectTransitions.toggle(application, anchor: anchor, previousFrontmost: previousFrontmost, opened: { [weak self] in
+            self?.openHistory.recordOpen(application)
+        }) { [weak self] in
             guard let self = self, self.presentationID == opening else { return }
             self.panel.orderOut(nil)
         }
@@ -393,7 +396,10 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private func openApplication(_ app: Application) {
         dismiss()
         onLaunch?(app)
-        NSWorkspace.shared.openApplication(at: app.url, configuration: .init()) { _, error in
+        NSWorkspace.shared.openApplication(at: app.url, configuration: .init()) { [weak self] running, error in
+            if error == nil, running != nil {
+                DispatchQueue.main.async { self?.openHistory.recordOpen(app) }
+            }
             if let error = error {
                 DispatchQueue.main.async {
                     let alert = NSAlert()
