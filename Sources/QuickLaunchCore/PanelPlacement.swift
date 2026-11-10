@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 public enum PanelPlacement {
     public static func fitted(_ frame: CGRect, in visibleFrame: CGRect) -> CGRect {

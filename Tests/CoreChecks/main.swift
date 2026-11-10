@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import QuickLaunchCore
 
 var checks = 0
