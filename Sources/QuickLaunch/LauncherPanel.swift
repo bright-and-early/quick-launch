@@ -59,6 +59,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         rows.alignment = .leading
         rows.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(rows)
+        emptyLabel.heightAnchor.constraint(equalToConstant: 44).isActive = true
         NSLayoutConstraint.activate([
             symbol.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
             symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 25),
@@ -98,10 +99,15 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main!
         let area = screen.visibleFrame
         let width = min(640, area.width - 40)
-        panel.setFrameOrigin(NSPoint(x: area.midX - width / 2, y: area.minY + area.height * 0.68 - panel.frame.height))
-        panel.setContentSize(NSSize(width: width, height: panel.frame.height))
+        let proposed = NSRect(x: area.midX - width / 2, y: area.minY + area.height * 0.68 - panel.frame.height, width: width, height: panel.frame.height)
+        panel.setFrame(PanelPlacement.fitted(proposed, in: area), display: true)
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
+    }
+
+    private var targetScreen: NSScreen {
+        if panel.isVisible, let screen = panel.screen { return screen }
+        return NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main!
     }
 
     func dismiss() { panel.orderOut(nil) }
@@ -133,7 +139,8 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
     }
 
     private func updateResults() {
-        matches = AppSearch.results(for: field.stringValue, in: applications)
+        let area = targetScreen.visibleFrame
+        matches = AppSearch.results(for: field.stringValue, in: applications, limit: PanelPlacement.resultLimit(in: area))
         selected = max(0, min(selected, matches.count - 1))
         drawRows()
     }
@@ -145,7 +152,6 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
             emptyLabel.textColor = .secondaryLabelColor
             emptyLabel.font = .systemFont(ofSize: 14)
             rows.addArrangedSubview(emptyLabel)
-            emptyLabel.heightAnchor.constraint(equalToConstant: 44).isActive = true
         } else {
             for (index, application) in matches.enumerated() {
                 let row = NSButton()
@@ -187,7 +193,8 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         }
         let height = CGFloat(76 + (matches.isEmpty ? 44 : matches.count * 58) + 10)
         let top = panel.frame.maxY
-        panel.setFrame(NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height), display: true)
+        let proposed = NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height)
+        panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
     }
 
     @objc private func clickRow(_ sender: NSButton) { selected = sender.tag; launchSelection() }
