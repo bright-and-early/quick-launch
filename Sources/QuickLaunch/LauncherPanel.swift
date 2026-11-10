@@ -62,8 +62,8 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         emptyLabel.heightAnchor.constraint(equalToConstant: 44).isActive = true
         NSLayoutConstraint.activate([
             symbol.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
-            symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 25),
-            symbol.widthAnchor.constraint(equalToConstant: 25), symbol.heightAnchor.constraint(equalToConstant: 25),
+            symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 22),
+            symbol.widthAnchor.constraint(equalToConstant: 32), symbol.heightAnchor.constraint(equalToConstant: 32),
             field.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 16),
             field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
             field.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
@@ -183,7 +183,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
                 NSLayoutConstraint.activate([
                     row.widthAnchor.constraint(equalTo: rows.widthAnchor), row.heightAnchor.constraint(equalToConstant: 54),
                     image.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 12), image.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                    image.widthAnchor.constraint(equalToConstant: 32), image.heightAnchor.constraint(equalToConstant: 32),
+                    image.widthAnchor.constraint(equalToConstant: 40), image.heightAnchor.constraint(equalToConstant: 40),
                     name.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 12), name.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
                     name.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -12),
                     path.leadingAnchor.constraint(equalTo: name.leadingAnchor), path.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 3),
