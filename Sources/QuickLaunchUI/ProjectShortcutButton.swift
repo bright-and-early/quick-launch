@@ -35,7 +35,8 @@ public final class ProjectShortcutButton: NSButton {
         super.draw(dirtyRect)
         if showsSelection {
             NSColor.labelColor.withAlphaComponent(0.8).setStroke()
-            let ring = NSBezierPath(ovalIn: bounds.insetBy(dx: 1.5, dy: 1.5))
+            let diameter = min(bounds.width, bounds.height) - 3
+            let ring = NSBezierPath(ovalIn: NSRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2, width: diameter, height: diameter))
             ring.lineWidth = 1.5
             ring.stroke()
         }
