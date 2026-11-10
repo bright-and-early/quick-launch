@@ -63,3 +63,28 @@ expect(!LauncherDismissal.shouldDismiss(click: CGPoint(x: 50, y: 50), panel: CGR
 expect(LauncherDismissal.shouldDismiss(click: CGPoint(x: 150, y: 50), panel: CGRect(x: 0, y: 0, width: 100, height: 100), isVisible: true), "outside click dismisses launcher")
 expect(!LauncherDismissal.shouldDismiss(click: CGPoint(x: 150, y: 50), panel: .zero, isVisible: false), "hidden launcher ignores background clicks")
 print("PASS: toggle and dismissal checks; total \(checks)")
+
+let usageSuite = "QuickLaunchChecks.\(UUID().uuidString)"
+let usageDefaults = UserDefaults(suiteName: usageSuite)!
+defer { usageDefaults.removePersistentDomain(forName: usageSuite) }
+let history = ApplicationOpenHistory(defaults: usageDefaults)
+let alphabetical = [app("Zebra"), app("Beta"), app("Alpha")]
+expect(history.counts.isEmpty, "fresh history has no opens")
+expect(AppSearch.results(for: "", in: alphabetical, openCounts: history.counts).map(\.name) == ["Alpha", "Beta", "Zebra"], "fresh usage retains alphabetical order")
+history.recordOpen(app("Zebra"))
+expect(AppSearch.results(for: "", in: alphabetical, openCounts: history.counts).map(\.name) == ["Zebra", "Alpha", "Beta"], "successful opens rank before alphabetical order")
+history.recordOpen(app("Beta"))
+expect(AppSearch.results(for: "", in: alphabetical, openCounts: history.counts).map(\.name) == ["Beta", "Zebra", "Alpha"], "equal open counts use alphabetical order")
+history.recordOpen(app("Zebra"))
+let restoredHistory = ApplicationOpenHistory(defaults: usageDefaults)
+expect(restoredHistory.counts[app("Zebra").url.path] == 2, "counts accumulate and survive history reload")
+expect(AppSearch.results(for: "", in: alphabetical, limit: 1, openCounts: restoredHistory.counts).first?.name == "Zebra", "limit is applied after frequency ordering")
+let otherBeta = Application(name: "Beta", url: URL(fileURLWithPath: "/Other/Beta.app"))
+expect(restoredHistory.counts[otherBeta.url.path] == nil, "same-name apps at different paths have separate histories")
+expect(AppSearch.results(for: "alpha", in: alphabetical, openCounts: restoredHistory.counts).first?.name == "Alpha", "search relevance is retained despite usage")
+expect(AppSearch.results(for: "a", in: [app("Able"), app("Axle")], openCounts: [app("Axle").url.path: 1]).first?.name == "Axle", "usage breaks equal-relevance search ties")
+usageDefaults.set([app("Zebra").url.path: Int.max], forKey: "applicationOpenCounts")
+let saturatedHistory = ApplicationOpenHistory(defaults: usageDefaults)
+saturatedHistory.recordOpen(app("Zebra"))
+expect(saturatedHistory.counts[app("Zebra").url.path] == Int.max, "counter saturation never overflows")
+print("PASS: persistent usage ordering; total \(checks)")

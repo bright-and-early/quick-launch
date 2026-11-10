@@ -10,6 +10,8 @@ Press **Right Arrow** with the caret at the end of the search text to focus the 
 
 The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
+The initial app list is alphabetical. Successful opens through Quick Launch are counted locally and saved between launches; the empty search list orders by most opens, then alphabetically. Typed searches keep match relevance first, then use open count and alphabetical order to break ties. Project-logo opens and restores count; hiding a project, cancelled transitions, and failed launches do not. Opens outside Quick Launch are not monitored.
+
 ## Build and install
 
 Requires macOS 13+ and the Xcode command line tools. On Steven's Mac, use the shared queue for each finite job:
