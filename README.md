@@ -4,7 +4,7 @@ A small native macOS application launcher written in Swift and AppKit. No third-
 
 Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Drag the search icon, empty search field, or window background to reposition it. When a query is present, the field keeps normal text selection. Scroll the results immediately after opening to browse every indexed app; arrow-key selection scrolls into view automatically. Click the menu bar magnifying glass to open the launcher or quit.
 
-The search row also shows one-click logos for AppLab, Atlas, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking opens that installed app through the same launch flow as a search result.
+The search row also shows project logos for AppLab, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking brings that app forward, or hides it if it was already frontmost. Atlas remains searchable but is not pinned. Escape closes the launcher from any control, and clicking outside dismisses it.
 
 The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
@@ -29,3 +29,11 @@ Diagnostic commands on the installed executable:
 "$HOME/Applications/Quick Launch.app/Contents/MacOS/QuickLaunch" --benchmark
 "$HOME/Applications/Quick Launch.app/Contents/MacOS/QuickLaunch" --inventory
 ```
+
+## Project window transitions
+
+Project-logo clicks animate an in-memory preview of the app's primary window into or out of the clicked logo. This uses ScreenCaptureKit on macOS 14+ and asks for Screen Recording access only when you deliberately click a project logo or choose **Enable Window Animations…** from the menu. No capture or permission prompt happens at startup, and no preview is saved to disk. Until access is granted, or when no window can be captured, the same app-wide hide/show toggle works without a preview. Search-result launches remain immediate.
+
+Transitions last 220 ms and animate layer position, scale and opacity. Reduce Motion uses an 80 ms fade. Escape/outside-click cancels pending capture or motion without activating a project over the app you just selected. Local app builds are ad-hoc signed, so macOS may ask you to re-enable capture permission after an update.
+
+For quiet delivery or startup, launch the installed executable with `--background` (or `open -g ... --args --background`); this registers the shortcut and menu without showing the panel. Reopening an already-visible launcher leaves its query intact.

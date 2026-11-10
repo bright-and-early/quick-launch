@@ -4,6 +4,14 @@ import QuickLaunchCore
 public final class SearchPanel: NSPanel {
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+    public var onDismiss: (() -> Void)?
+    public override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown && event.keyCode == 53 { cancelOperation(nil); return }
+        super.sendEvent(event)
+    }
+    public override func cancelOperation(_ sender: Any?) {
+        if let onDismiss = onDismiss { onDismiss() } else { orderOut(nil) }
+    }
 }
 
 public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
@@ -25,6 +33,11 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private var icons: [URL: NSImage] = [:]
     private var scanning = false
     private var lastScan = Date.distantPast
+    private var outsideClickMonitor: Any?
+    private var localClickMonitor: Any?
+    private var previousFrontmost: NSRunningApplication?
+    private var presentationID = UUID()
+    private let projectTransitions = ProjectAppTransitions()
     var onLaunch: ((Application) -> Void)?
 
     public override init() {
@@ -40,6 +53,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.delegate = self
+        panel.onDismiss = { [weak self] in self?.dismiss() }
         panel.title = "Quick Launch"
         content.material = .hudWindow
         content.blendingMode = .behindWindow
@@ -143,7 +157,29 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
             emptyLabel.topAnchor.constraint(equalTo: resultsScroll.topAnchor),
             emptyLabel.heightAnchor.constraint(equalToConstant: 44)
         ])
+        installDismissalMonitors()
         refreshIndex(force: true)
+    }
+
+    deinit {
+        if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
+        if let monitor = localClickMonitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    private func installDismissalMonitors() {
+        let mouseEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] _ in
+            self?.dismissIfOutside(NSEvent.mouseLocation)
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+            let point = event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
+            self?.dismissIfOutside(point)
+            return event
+        }
+    }
+
+    private func dismissIfOutside(_ point: NSPoint) {
+        if LauncherDismissal.shouldDismiss(click: point, panel: panel.frame, isVisible: panel.isVisible) { dismiss() }
     }
 
     public func refreshIndex(force: Bool = false) {
@@ -164,6 +200,10 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
 
     public func toggle() {
         if panel.isVisible { dismiss(); return }
+        presentationID = UUID()
+        if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            previousFrontmost = front
+        }
         refreshIndex()
         field.stringValue = ""
         selected = 0
@@ -182,8 +222,15 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         return NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main!
     }
 
-    func dismiss() { panel.orderOut(nil) }
-    public func windowDidResignKey(_ notification: Notification) { dismiss() }
+    public func dismiss() {
+        presentationID = UUID()
+        projectTransitions.cancel()
+        panel.orderOut(nil)
+    }
+    public func requestWindowAnimationPermission() { projectTransitions.requestPermission() }
+    public func windowDidResignKey(_ notification: Notification) {
+        if !projectTransitions.isBusy { dismiss() }
+    }
     public func controlTextDidChange(_ obj: Notification) {
         selected = 0
         updateResults()
@@ -286,7 +333,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
             button.imageScaling = .scaleProportionallyUpOrDown
             button.refusesFirstResponder = true
             button.toolTip = application.name
-            button.setAccessibilityLabel("Open \(application.name)")
+            button.setAccessibilityLabel("Toggle \(application.name)")
             button.tag = index
             projectButtons.addArrangedSubview(button)
             button.widthAnchor.constraint(equalToConstant: 32).isActive = true
@@ -300,7 +347,13 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
 
     @objc private func clickProject(_ sender: NSButton) {
         guard projectApplications.indices.contains(sender.tag) else { return }
-        openApplication(projectApplications[sender.tag])
+        let application = projectApplications[sender.tag]
+        let anchor = panel.convertToScreen(sender.convert(sender.bounds, to: nil))
+        let opening = presentationID
+        projectTransitions.toggle(application, anchor: anchor, previousFrontmost: previousFrontmost) { [weak self] in
+            guard let self = self, self.presentationID == opening else { return }
+            self.panel.orderOut(nil)
+        }
     }
 
     private func launchSelection() {
