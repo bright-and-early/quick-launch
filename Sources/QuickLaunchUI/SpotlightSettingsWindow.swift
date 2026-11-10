@@ -17,7 +17,9 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
         self.parent = parent
         super.init()
         sheet.title = "Spotlight services"
-        let content = sheet.contentView!
+        let content = NSVisualEffectView(frame: sheet.contentView!.bounds)
+        content.material = .hudWindow; content.blendingMode = .withinWindow; content.state = .active; content.wantsLayer = true
+        sheet.contentView = content
         let impact = NSTextField(wrappingLabelWithString: "Disabling these services affects Spotlight indexing, Finder and app searches, and search suggestions. Quick Launch uses its own index. macOS may refuse changes to protected services. Enabling allows services to load again; it does not start them immediately.")
         impact.font = .systemFont(ofSize: 12)
         let scroll = NSScrollView()
@@ -113,7 +115,7 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
     private func apply(_ request: SpotlightRequest) {
         guard request.isValid, let executable = Bundle.main.executableURL else { return }
         let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/QuickLaunch/SpotlightReports")
-        let receipt = directory.appendingPathComponent(UUID().uuidString + ".json")
+        let receipt = directory.appendingPathComponent(request.id.uuidString + ".json")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try JSONEncoder().encode(request).write(to: receipt, options: .atomic)
@@ -124,8 +126,17 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
             let encoded = (try! JSONEncoder().encode(request)).base64EncodedString()
             let command = [executable.path, "--spotlight-apply", encoded].map(shellQuote).joined(separator: " ")
             let script = "do shell script \"" + command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\" with administrator privileges"
-            let result = SystemCommand.run("/usr/bin/osascript", ["-e", script], timeout: 180)
-            let changes = result.status == 0 ? try? JSONDecoder().decode([SpotlightChange].self, from: Data(result.output.utf8)) : nil
+            let result = SystemCommand.run("/usr/bin/osascript", ["-e", script], timeout: nil)
+            var journal = SpotlightJournal.read(request.id)
+            // If the authorization wrapper exits unexpectedly, keep the workflow
+            // busy until the helper completes or its process is known to have exited.
+            while let started = journal.first, journal.last?.phase != "complete" {
+                if kill(started.pid, 0) != 0 && errno == ESRCH { break }
+                Thread.sleep(forTimeInterval: 0.5)
+                journal = SpotlightJournal.read(request.id)
+            }
+            let decoded = try? JSONDecoder().decode([SpotlightChange].self, from: Data(result.output.utf8))
+            let changes = decoded ?? (journal.isEmpty ? nil : journal.compactMap(\.change))
             var saveError = ""
             if let changes = changes {
                 do { try JSONEncoder().encode(changes).write(to: receipt, options: .atomic) } catch { saveError = " Could not save final results: " + error.localizedDescription }
@@ -137,7 +148,8 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
                 self.outcomes = Dictionary((changes ?? []).map { ($0.service.target, ($0.succeeded ? "✓ " : "Not completed: ") + $0.detail) }, uniquingKeysWith: { _, last in last })
                 self.setBusy(false)
                 if let changes = changes {
-                    self.message.stringValue = "\(changes.filter(\.succeeded).count) of \(changes.count) verified. Reports: ~/Library/Application Support/QuickLaunch/SpotlightReports." + saveError + inventory.errors.joined(separator: "\n")
+                    let interrupted = journal.last?.phase == "complete" ? "" : "Operation interrupted; inspect the journal before retrying. "
+                    self.message.stringValue = interrupted + "\(changes.filter(\.succeeded).count) of \(request.services.count) verified. Journals: /Library/Application Support/QuickLaunch/SpotlightReports." + saveError + inventory.errors.joined(separator: "\n")
                 } else { self.message.stringValue = "Change was cancelled or could not be verified. " + result.error + saveError }
             }
         }

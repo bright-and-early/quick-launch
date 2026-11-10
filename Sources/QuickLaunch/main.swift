@@ -9,9 +9,18 @@ if let index = CommandLine.arguments.firstIndex(of: "--spotlight-apply") {
           let request = try? JSONDecoder().decode(SpotlightRequest.self, from: data), request.isValid else {
         fputs("Invalid or unprivileged Spotlight request.\n", stderr); exit(1)
     }
-    let changes = SpotlightServices.apply(request, run: SystemCommand.launchctl)
-    FileHandle.standardOutput.write(try JSONEncoder().encode(changes))
-    exit(0)
+    do {
+        let journal = try SpotlightJournal(id: request.id)
+        let changes = SpotlightServices.apply(request, run: { arguments in
+            let remaining = request.deadline.timeIntervalSinceNow
+            guard remaining > 0 else { return CommandResult(-1, "", "Operation deadline reached; no further command issued.") }
+            return SystemCommand.run("/bin/launchctl", arguments, timeout: min(10, remaining))
+        }, beforeChange: { journal.append(phase: "before", service: $0) }, saveResult: { journal.append(phase: "result", change: $0) })
+        let completed = journal.append(phase: "complete")
+        FileHandle.standardOutput.write(try JSONEncoder().encode(changes))
+        if !completed { fputs("Journal could not be completed: \(journal.error)\n", stderr) }
+        exit(completed ? 0 : 1)
+    } catch { fputs("No services changed: \(error.localizedDescription)\n", stderr); exit(1) }
 }
 if CommandLine.arguments.contains("--spotlight-status") {
     let inventory = SpotlightServices.discover(uid: getuid(), run: SystemCommand.launchctl)
@@ -161,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
-let application = NSApplication.shared
+let application = LauncherApplication.shared
 let delegate = AppDelegate()
 application.setActivationPolicy(.accessory)
 application.delegate = delegate

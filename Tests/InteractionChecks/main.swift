@@ -285,3 +285,17 @@ let spotlightFixture = spotlightServiceEvidence([
 let reviewButtons = descendants(spotlightFixture.1).compactMap { $0 as? NSButton }
 expect(reviewButtons.contains { $0.title == "Disable selected…" } && reviewButtons.contains { $0.title == "Enable selected…" }, "Spotlight review has explicit disable and enable actions")
 withExtendedLifetime(spotlightFixture.0) { captureEvidence(spotlightFixture.1, name: "spotlight-review-fixture-hidden-native.png") }
+
+let recorderMenu = NSMenu()
+let menuSpy = ProjectActionSpy()
+let quitItem = NSMenuItem(title: "Quit", action: #selector(ProjectActionSpy.activate(_:)), keyEquivalent: "q")
+quitItem.keyEquivalentModifierMask = .command
+quitItem.target = menuSpy
+recorderMenu.addItem(quitItem)
+let commandQ = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: dismissPanel.windowNumber, context: nil, characters: "q", charactersIgnoringModifiers: "q", isARepeat: false, keyCode: 12)!
+recorder.performClick(nil)
+_ = dismissPanel.makeFirstResponder(recorder)
+if !dismissPanel.performKeyEquivalent(with: commandQ) { _ = recorderMenu.performKeyEquivalent(with: commandQ) }
+expect(menuSpy.activations == 0 && recorder.title == "⌘Q" && !recorder.isRecording, "recording intercepts Command-Q before a real menu key equivalent")
+_ = recorderMenu.performKeyEquivalent(with: commandQ)
+expect(menuSpy.activations == 1, "the menu fixture remains functional outside shortcut recording")

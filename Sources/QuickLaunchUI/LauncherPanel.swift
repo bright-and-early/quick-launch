@@ -5,10 +5,11 @@ public final class SearchPanel: NSPanel {
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
     public var onDismiss: (() -> Void)?
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        ShortcutRecorder.consume(event, in: self) || super.performKeyEquivalent(with: event)
+    }
     public override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, event.keyCode == 53, let recorder = firstResponder as? ShortcutRecorder, recorder.isRecording {
-            recorder.keyDown(with: event); return
-        }
+        if ShortcutRecorder.consume(event, in: self) { return }
         if event.type == .keyDown && event.keyCode == 53 { cancelOperation(nil); return }
         super.sendEvent(event)
     }

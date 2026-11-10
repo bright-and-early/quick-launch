@@ -143,3 +143,24 @@ expect(AppSearch.results(for: "", in: apps, shouldCancel: { true }).isEmpty, "su
 expect(ApplicationIndex.scan(roots: [root], includeFiles: true, shouldCancel: { true }).isEmpty, "superseded directory scans stop without walking contents")
 
 print("PASS: all core checks; total \(checks)")
+
+commands = []
+let noJournal = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: true), run: { args in
+    commands.append(args)
+    return args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => false") : CommandResult(0)
+}, beforeChange: { _ in false })
+expect(noJournal.first?.succeeded == false && !commands.contains { ["disable", "enable", "bootout"].contains($0[0]) }, "unwritable authoritative before-journal prevents every mutation")
+var beforeJournal: SpotlightService?
+var recordedOutcomes = 0
+let journalled = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: false), run: { args in
+    args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => false") : CommandResult(0)
+}, beforeChange: { beforeJournal = $0; return true }, saveResult: { _ in recordedOutcomes += 1; return true })
+expect(beforeJournal?.loaded == true && beforeJournal?.disabled == false && recordedOutcomes == 1 && journalled.first?.succeeded == true, "fresh authoritative state and each outcome reach journal hooks")
+let secondService = SpotlightService(label: "com.apple.corespotlightd", domain: service.domain, loaded: true, disabled: false)
+commands = []
+_ = SpotlightServices.apply(SpotlightRequest(services: [service, secondService], disabled: false), run: { args in
+    commands.append(args)
+    return args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => false") : CommandResult(0)
+}, saveResult: { _ in false })
+expect(commands.filter { $0[0] == "enable" }.count == 1, "outcome-journal failure stops subsequent service mutations")
+print("PASS: journal failure boundaries; total \(checks)")

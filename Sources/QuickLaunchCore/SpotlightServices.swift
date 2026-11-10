@@ -28,10 +28,12 @@ public struct SpotlightChange: Codable {
 }
 
 public struct SpotlightRequest: Codable {
+    public let id: UUID
+    public let deadline: Date
     public let services: [SpotlightService]
     public let disabled: Bool
-    public init(services: [SpotlightService], disabled: Bool) { self.services = services; self.disabled = disabled }
-    public var isValid: Bool { !services.isEmpty && services.count <= 128 && services.allSatisfy { SpotlightServices.isValidTarget($0) } }
+    public init(services: [SpotlightService], disabled: Bool) { self.id = UUID(); self.deadline = Date().addingTimeInterval(120); self.services = services; self.disabled = disabled }
+    public var isValid: Bool { !services.isEmpty && services.count <= 128 && deadline > Date() && deadline.timeIntervalSinceNow <= 180 && services.allSatisfy { SpotlightServices.isValidTarget($0) } }
 }
 
 public enum SpotlightServices {
@@ -75,17 +77,24 @@ public enum SpotlightServices {
         }
         return (services, errors)
     }
-    public static func apply(_ request: SpotlightRequest, run: Runner) -> [SpotlightChange] {
+    public static func apply(_ request: SpotlightRequest, run: Runner, beforeChange: (SpotlightService) -> Bool = { _ in true }, saveResult: (SpotlightChange) -> Bool = { _ in true }) -> [SpotlightChange] {
         guard request.isValid else { return [] }
+        var journalHealthy = true
         return request.services.map { service in
             var before = service
-            func result(_ ok: Bool, _ message: String) -> SpotlightChange { SpotlightChange(service: before, disabled: request.disabled, succeeded: ok, detail: message) }
+            func result(_ ok: Bool, _ message: String) -> SpotlightChange {
+                let change = SpotlightChange(service: before, disabled: request.disabled, succeeded: ok, detail: message)
+                if !saveResult(change) { journalHealthy = false; return SpotlightChange(service: before, disabled: request.disabled, succeeded: false, detail: message + " Final journal write failed; further changes stopped.") }
+                return change
+            }
+            guard journalHealthy else { return SpotlightChange(service: before, disabled: request.disabled, succeeded: false, detail: "Not changed: journal is unavailable.") }
             let originalPolicy = run(["print-disabled", service.domain])
             guard originalPolicy.status == 0 else { return result(false, "Cannot read original policy. " + originalPolicy.error) }
             let originalJob = run(["print", service.target])
             let missing = originalJob.status == 113 && originalJob.error.contains("Could not find service") && originalJob.error.contains(service.label)
             guard originalJob.status == 0 || missing else { return result(false, "Cannot verify the original job. " + originalJob.error) }
             before = SpotlightService(label: service.label, domain: service.domain, loaded: originalJob.status == 0, disabled: overrides(originalPolicy.output)[service.label])
+            guard beforeChange(before) else { journalHealthy = false; return result(false, "Not changed: original state could not be journaled.") }
             let action = run([request.disabled ? "disable" : "enable", service.target])
             guard action.status == 0 else { return result(false, action.error.isEmpty ? action.output : action.error) }
             let stop = request.disabled ? run(["bootout", service.target]) : nil

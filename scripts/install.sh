@@ -18,6 +18,7 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
+<key>NSPrincipalClass</key><string>QuickLaunchApplication</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

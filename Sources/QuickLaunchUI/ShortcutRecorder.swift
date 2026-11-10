@@ -1,12 +1,24 @@
 import AppKit
 import QuickLaunchCore
 
+@objc(QuickLaunchApplication) public final class LauncherApplication: NSApplication {
+    public override func sendEvent(_ event: NSEvent) {
+        if ShortcutRecorder.consume(event, in: keyWindow) { return }
+        super.sendEvent(event)
+    }
+}
+
 public final class ShortcutRecorder: NSButton {
     public private(set) var isRecording = false
     public var onChange: ((LauncherHotKey) -> String?)?
     public var onMessage: ((String) -> Void)?
     private var shortcut: LauncherHotKey = .standard
     public override var acceptsFirstResponder: Bool { true }
+    public static func consume(_ event: NSEvent, in window: NSWindow?) -> Bool {
+        guard event.type == .keyDown, let recorder = window?.firstResponder as? ShortcutRecorder, recorder.isRecording else { return false }
+        recorder.keyDown(with: event)
+        return true
+    }
     public override init(frame: NSRect) {
         super.init(frame: frame)
         bezelStyle = .rounded

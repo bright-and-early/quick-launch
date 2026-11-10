@@ -3,7 +3,7 @@ import Darwin
 
 public enum SystemCommand {
     /// File-backed output avoids pipe deadlocks for large launchd inventories.
-    public static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 10) -> CommandResult {
+    public static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval? = 10) -> CommandResult {
         let manager = FileManager.default
         let directory = manager.temporaryDirectory.appendingPathComponent("quick-launch-command-" + UUID().uuidString)
         do {
@@ -20,10 +20,16 @@ public enum SystemCommand {
             let ended = DispatchSemaphore(value: 0)
             process.terminationHandler = { _ in ended.signal() }
             try process.run()
-            if ended.wait(timeout: .now() + timeout) == .timedOut {
-                process.terminate()
-                if ended.wait(timeout: .now() + 2) == .timedOut { kill(process.processIdentifier, SIGKILL); _ = ended.wait(timeout: .now() + 2) }
-                return CommandResult(-1, "", "The command timed out.")
+            if let timeout = timeout {
+                if ended.wait(timeout: .now() + timeout) == .timedOut {
+                    process.terminate()
+                    if ended.wait(timeout: .now() + 2) == .timedOut { kill(process.processIdentifier, SIGKILL); ended.wait() }
+                    return CommandResult(-1, "", "The command timed out and was stopped.")
+                }
+            } else {
+                // Authorization launches a separate privileged process; wait for its
+                // bounded batch rather than killing only the authorization wrapper.
+                ended.wait()
             }
             return CommandResult(process.terminationStatus, String(decoding: try Data(contentsOf: stdout), as: UTF8.self), String(decoding: try Data(contentsOf: stderr), as: UTF8.self))
         } catch { return CommandResult(-1, "", error.localizedDescription) }
