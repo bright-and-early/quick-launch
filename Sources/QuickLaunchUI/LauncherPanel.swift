@@ -146,14 +146,14 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         content.addSubview(emptyLabel)
         NSLayoutConstraint.activate([
             symbol.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
-            symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 26),
+            symbol.centerYAnchor.constraint(equalTo: field.centerYAnchor),
             symbol.widthAnchor.constraint(equalToConstant: 26), symbol.heightAnchor.constraint(equalToConstant: 26),
             field.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 16),
             fieldTrailingToEdge,
             projectButtons.trailingAnchor.constraint(equalTo: settingsDivider.leadingAnchor, constant: -12),
             projectButtons.centerYAnchor.constraint(equalTo: field.centerYAnchor),
-            field.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            field.heightAnchor.constraint(equalToConstant: 38),
+            field.centerYAnchor.constraint(equalTo: settingsButton.centerYAnchor),
+            field.heightAnchor.constraint(equalToConstant: field.intrinsicContentSize.height),
             emptySearchDrag.leadingAnchor.constraint(equalTo: field.leadingAnchor),
             emptySearchDrag.trailingAnchor.constraint(equalTo: field.trailingAnchor),
             emptySearchDrag.topAnchor.constraint(equalTo: field.topAnchor),
@@ -385,6 +385,12 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         case #selector(NSResponder.cancelOperation(_:)):
             dismiss(); return true
         case #selector(NSResponder.insertTab(_:)):
+            let range = textView.selectedRange()
+            let atEnd = range.length == 0 && range.location == (textView.string as NSString).length
+            let canComplete = matches.indices.contains(selected) && AppSearch.normalize(field.stringValue) != AppSearch.normalize(matches[selected].name)
+            if atEnd && !canComplete && !faces.showingBack {
+                return panel.makeFirstResponder(projectButtons.arrangedSubviews.first ?? settingsButton)
+            }
             guard matches.indices.contains(selected) else { return true }
             field.stringValue = matches[selected].name
             selected = 0
