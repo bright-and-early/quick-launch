@@ -2,6 +2,7 @@ import AppKit
 
 public final class ProjectShortcutButton: NSButton {
     var navigate: ((Int, Bool) -> Void)?
+    var showsSelection = false { didSet { needsDisplay = true } }
     private var pointerInside = false
     private var pointerTracking: NSTrackingArea?
     public override var acceptsFirstResponder: Bool { true }
@@ -32,6 +33,13 @@ public final class ProjectShortcutButton: NSButton {
             }
         }
         super.draw(dirtyRect)
+        if showsSelection {
+            NSColor.labelColor.withAlphaComponent(0.8).setStroke()
+            let diameter = min(bounds.width, bounds.height) - 3
+            let ring = NSBezierPath(ovalIn: NSRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2, width: diameter, height: diameter))
+            ring.lineWidth = 1.5
+            ring.stroke()
+        }
     }
 
     public override func keyDown(with event: NSEvent) {

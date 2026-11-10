@@ -222,7 +222,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         reverse.addSubview(colorLabel)
         let swatches = NSStackView()
         swatches.orientation = .horizontal
-        swatches.spacing = 10
+        swatches.spacing = 8
         swatches.translatesAutoresizingMaskIntoConstraints = false
         reverse.addSubview(swatches)
         for (index, color) in HighlightColor.allCases.enumerated() {
@@ -287,6 +287,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private func updateColorButtons() {
         for (index, button) in colorButtons.enumerated() {
             let selected = HighlightColor.allCases[index] == LauncherAppearance.shared.highlight
+            button.showsSelection = selected
             button.image = NSImage(systemSymbolName: selected ? "checkmark.circle.fill" : "circle.fill", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 24, weight: .regular))
             button.setAccessibilityValue(selected ? "Selected" : "")
         }
