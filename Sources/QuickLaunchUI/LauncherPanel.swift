@@ -22,6 +22,12 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private let emptySearchDrag = DragSurface()
     private let iconDrag = DragSurface()
     private let projectButtons = NSStackView()
+    private let settingsButton = ProjectShortcutButton()
+    private let settingsDivider = NSBox()
+    private let reverse = NSVisualEffectView()
+    private let backButton = ProjectShortcutButton()
+    private var colorButtons: [ProjectShortcutButton] = []
+    private var faces: LauncherFaces!
     private var projectApplications: [Application] = []
     private var fieldTrailingToProjects: NSLayoutConstraint!
     private var fieldTrailingToEdge: NSLayoutConstraint!
@@ -61,7 +67,14 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         content.state = .active
         content.wantsLayer = true
         content.layer?.cornerRadius = 16
-        panel.contentView = content
+        faces = LauncherFaces(front: content, reverse: reverse)
+        panel.contentView = faces
+        faces.onSettled = { [weak self] back in
+            guard let self = self else { return }
+            if back { self.panel.makeFirstResponder(self.backButton) }
+            else { self.focusSearch() }
+        }
+        configureSettings()
 
         let symbol = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)!)
         symbol.contentTintColor = .secondaryLabelColor
@@ -72,7 +85,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .systemFont(ofSize: 26, weight: .regular)
+        field.font = .systemFont(ofSize: 23, weight: .regular)
         field.placeholderString = "Search applications"
         field.setAccessibilityLabel("Search applications")
         field.delegate = self
@@ -96,7 +109,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         projectButtons.isHidden = true
         content.addSubview(projectButtons)
         fieldTrailingToProjects = field.trailingAnchor.constraint(equalTo: projectButtons.leadingAnchor, constant: -16)
-        fieldTrailingToEdge = field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22)
+        fieldTrailingToEdge = field.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -16)
         resultsScroll.translatesAutoresizingMaskIntoConstraints = false
         resultsScroll.drawsBackground = false
         resultsScroll.borderType = .noBorder
@@ -133,11 +146,11 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         content.addSubview(emptyLabel)
         NSLayoutConstraint.activate([
             symbol.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
-            symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 22),
-            symbol.widthAnchor.constraint(equalToConstant: 32), symbol.heightAnchor.constraint(equalToConstant: 32),
+            symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 26),
+            symbol.widthAnchor.constraint(equalToConstant: 26), symbol.heightAnchor.constraint(equalToConstant: 26),
             field.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 16),
             fieldTrailingToEdge,
-            projectButtons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            projectButtons.trailingAnchor.constraint(equalTo: settingsDivider.leadingAnchor, constant: -12),
             projectButtons.centerYAnchor.constraint(equalTo: field.centerYAnchor),
             field.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             field.heightAnchor.constraint(equalToConstant: 38),
@@ -160,6 +173,123 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         ])
         installDismissalMonitors()
         refreshIndex(force: true)
+    }
+
+    private func configureSettings() {
+        settingsButton.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
+        settingsButton.target = self
+        settingsButton.action = #selector(showSettings(_:))
+        settingsButton.tag = -1
+        settingsButton.toolTip = "Settings"
+        settingsButton.setAccessibilityLabel("Settings")
+        settingsButton.isBordered = false
+        settingsButton.focusRingType = .none
+        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        settingsButton.navigate = { [weak self] offset, _ in
+            guard let self = self else { return }
+            if offset < 0, let last = self.projectButtons.arrangedSubviews.last { self.panel.makeFirstResponder(last) }
+            else { self.focusSearch() }
+        }
+        content.addSubview(settingsButton)
+        settingsDivider.boxType = .separator
+        settingsDivider.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(settingsDivider)
+        reverse.material = .hudWindow
+        reverse.blendingMode = .behindWindow
+        reverse.state = .active
+        reverse.layer?.cornerRadius = 16
+        backButton.image = NSImage(systemSymbolName: "arrow.left", accessibilityDescription: nil)
+        backButton.target = self
+        backButton.action = #selector(showSearch(_:))
+        backButton.tag = -2
+        backButton.toolTip = "Back to search"
+        backButton.setAccessibilityLabel("Back to search")
+        backButton.isBordered = false
+        backButton.focusRingType = .none
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.navigate = { [weak self] offset, _ in
+            guard let self = self else { return }
+            self.panel.makeFirstResponder(offset > 0 ? self.colorButtons.first : self.colorButtons.last)
+        }
+        reverse.addSubview(backButton)
+        let title = NSTextField(labelWithString: "Settings")
+        title.font = .systemFont(ofSize: 23)
+        title.translatesAutoresizingMaskIntoConstraints = false
+        reverse.addSubview(title)
+        let colorLabel = NSTextField(labelWithString: "Highlight color")
+        colorLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        colorLabel.translatesAutoresizingMaskIntoConstraints = false
+        reverse.addSubview(colorLabel)
+        let swatches = NSStackView()
+        swatches.orientation = .horizontal
+        swatches.spacing = 10
+        swatches.translatesAutoresizingMaskIntoConstraints = false
+        reverse.addSubview(swatches)
+        for (index, color) in HighlightColor.allCases.enumerated() {
+            let button = ProjectShortcutButton()
+            button.tag = -10 - index
+            button.target = self
+            button.action = #selector(changeHighlight(_:))
+            button.toolTip = color.title
+            button.setAccessibilityLabel(color.title)
+            button.isBordered = false
+            button.focusRingType = .none
+            button.contentTintColor = color.color
+            button.navigate = { [weak self] offset, _ in
+                guard let self = self else { return }
+                let next = index + offset
+                self.panel.makeFirstResponder(self.colorButtons.indices.contains(next) ? self.colorButtons[next] : self.backButton)
+            }
+            colorButtons.append(button)
+            swatches.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        }
+        updateColorButtons()
+        NSLayoutConstraint.activate([
+            settingsButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            settingsButton.topAnchor.constraint(equalTo: content.topAnchor, constant: 23),
+            settingsButton.widthAnchor.constraint(equalToConstant: 32), settingsButton.heightAnchor.constraint(equalToConstant: 32),
+            settingsDivider.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -10),
+            settingsDivider.centerYAnchor.constraint(equalTo: settingsButton.centerYAnchor),
+            settingsDivider.widthAnchor.constraint(equalToConstant: 1), settingsDivider.heightAnchor.constraint(equalToConstant: 22),
+            backButton.leadingAnchor.constraint(equalTo: reverse.leadingAnchor, constant: 22),
+            backButton.topAnchor.constraint(equalTo: reverse.topAnchor, constant: 23),
+            backButton.widthAnchor.constraint(equalToConstant: 32), backButton.heightAnchor.constraint(equalToConstant: 32),
+            title.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 14),
+            title.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            colorLabel.leadingAnchor.constraint(equalTo: reverse.leadingAnchor, constant: 26),
+            colorLabel.topAnchor.constraint(equalTo: reverse.topAnchor, constant: 84),
+            swatches.leadingAnchor.constraint(equalTo: colorLabel.trailingAnchor, constant: 18),
+            swatches.centerYAnchor.constraint(equalTo: colorLabel.centerYAnchor)
+        ])
+    }
+
+    @objc private func showSettings(_ sender: Any?) {
+        guard !faces.isFlipping && !projectTransitions.isBusy else { return }
+        faces.setShowingBack(true, animated: panel.isVisible)
+    }
+
+    @objc private func showSearch(_ sender: Any?) {
+        guard !faces.isFlipping else { return }
+        faces.setShowingBack(false, animated: panel.isVisible)
+    }
+
+    @objc private func changeHighlight(_ sender: NSButton) {
+        let index = -sender.tag - 10
+        guard HighlightColor.allCases.indices.contains(index) else { return }
+        LauncherAppearance.shared.choose(HighlightColor.allCases[index])
+        updateColorButtons()
+        func redraw(_ view: NSView) { view.needsDisplay = true; view.subviews.forEach(redraw) }
+        redraw(faces)
+    }
+
+    private func updateColorButtons() {
+        for (index, button) in colorButtons.enumerated() {
+            let selected = HighlightColor.allCases[index] == LauncherAppearance.shared.highlight
+            button.image = NSImage(systemSymbolName: selected ? "checkmark.circle.fill" : "circle.fill", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 24, weight: .regular))
+            button.setAccessibilityValue(selected ? "Selected" : "")
+        }
     }
 
     deinit {
@@ -202,6 +332,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     public func toggle() {
         if panel.isVisible { dismiss(); return }
         presentationID = UUID()
+        faces.setShowingBack(false, animated: false)
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             previousFrontmost = front
         }
@@ -227,6 +358,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         presentationID = UUID()
         projectTransitions.cancel()
         panel.orderOut(nil)
+        faces.setShowingBack(false, animated: false)
     }
     public func requestWindowAnimationPermission() { projectTransitions.requestPermission() }
     public func windowDidResignKey(_ notification: Notification) {
@@ -242,8 +374,8 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         case #selector(NSResponder.moveRight(_:)), #selector(NSResponder.moveForward(_:)):
             let range = textView.selectedRange()
             guard range.length == 0, range.location == (textView.string as NSString).length,
-                  let first = projectButtons.arrangedSubviews.first else { return false }
-            return panel.makeFirstResponder(first)
+                  !faces.showingBack else { return false }
+            return panel.makeFirstResponder(projectButtons.arrangedSubviews.first ?? settingsButton)
         case #selector(NSResponder.moveDown(_:)):
             moveSelection(by: 1); return true
         case #selector(NSResponder.moveUp(_:)):
@@ -275,7 +407,9 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         let height = CGFloat(76 + (matches.isEmpty ? 44 : visibleCount * 58) + 10)
         let top = panel.frame.maxY
         let proposed = NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height)
-        panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
+        if !faces.showingBack && !faces.isFlipping {
+            panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
+        }
         emptyLabel.stringValue = scanning ? "Loading applications…" : "No applications found"
         emptyLabel.isHidden = !matches.isEmpty
         resultsScroll.isHidden = matches.isEmpty
@@ -354,6 +488,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         fieldTrailingToEdge.isActive = !hasProjects
         fieldTrailingToProjects.isActive = hasProjects
         projectButtons.isHidden = !hasProjects
+        settingsDivider.isHidden = !hasProjects
         if let focusedURL = focusedURL {
             if let index = projectApplications.firstIndex(where: { $0.url == focusedURL }) {
                 panel.makeFirstResponder(projectButtons.arrangedSubviews[index])
@@ -368,8 +503,10 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
 
     private func moveProjectFocus(from index: Int, by offset: Int, tab: Bool) {
         let next = index + offset
-        if next < 0 || (tab && next >= projectButtons.arrangedSubviews.count) {
+        if next < 0 {
             focusSearch()
+        } else if next >= projectButtons.arrangedSubviews.count {
+            panel.makeFirstResponder(settingsButton)
         } else if projectButtons.arrangedSubviews.indices.contains(next) {
             panel.makeFirstResponder(projectButtons.arrangedSubviews[next])
         }

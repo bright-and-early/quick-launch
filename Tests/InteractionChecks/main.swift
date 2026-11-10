@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import QuickLaunchCore
 import QuickLaunchUI
 
@@ -7,6 +8,14 @@ func expect(_ value: @autoclosure () -> Bool, _ message: String) {
     print("PASS: \(message)")
 }
 func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+func captureEvidence(_ view: NSView, name: String) {
+    guard let directory = ProcessInfo.processInfo.environment["QUICK_LAUNCH_EVIDENCE_DIR"],
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+    let destination = URL(fileURLWithPath: directory).appendingPathComponent(name)
+    try! FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try! bitmap.representation(using: .png, properties: [:])!.write(to: destination)
+}
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 let launcher = LauncherController()
@@ -96,7 +105,7 @@ while transitionCompletions == 0 && Date() < cancellationDeadline {
 expect(injectedLaunches == 0, "cancellation before the scheduled transition prevents app launch")
 expect(transitionCompletions == 1, "cancelled transition still releases its busy state exactly once")
 
-let projectLogos = descendants(content).compactMap { $0 as? ProjectShortcutButton }.sorted { $0.tag < $1.tag }
+let projectLogos = descendants(content).compactMap { $0 as? ProjectShortcutButton }.filter { $0.tag >= 0 }.sorted { $0.tag < $1.tag }
 expect(projectLogos.count >= 2, "installed project logos accept keyboard focus")
 editor.string = "A🚀"
 editor.setSelectedRange(NSRange(location: 1, length: 0))
@@ -120,9 +129,13 @@ projectLogos[0].keyDown(with: projectKey(123))
 expect(launcher.panel.firstResponder !== projectLogos[0] && header.currentEditor()?.selectedRange == NSRange(location: 0, length: 0), "Left Arrow from the first logo restores search focus at the text end")
 _ = launcher.panel.makeFirstResponder(projectLogos.last!)
 projectLogos.last!.keyDown(with: projectKey(124))
-expect(launcher.panel.firstResponder === projectLogos.last!, "Right Arrow at the last logo stays within the project group")
+let settingsButton = descendants(content).compactMap { $0 as? ProjectShortcutButton }.first { $0.tag == -1 }!
+expect(launcher.panel.firstResponder === settingsButton, "Right Arrow after the last logo reaches settings")
+_ = launcher.panel.makeFirstResponder(projectLogos.last!)
 projectLogos.last!.keyDown(with: projectKey(48))
-expect(launcher.panel.firstResponder !== projectLogos.last!, "Tab after the last project returns to search")
+expect(launcher.panel.firstResponder === settingsButton, "Tab after the last project reaches settings")
+settingsButton.keyDown(with: projectKey(48))
+expect(launcher.panel.firstResponder !== settingsButton, "Tab after settings returns to search")
 final class ProjectActionSpy: NSObject {
     var activations = 0
     @objc func activate(_ sender: Any?) { activations += 1 }
@@ -145,3 +158,55 @@ expect(projectLogos[1].superview == nil && (launcher.panel.firstResponder as? Pr
 let refreshedLogo = launcher.panel.firstResponder as! ProjectShortcutButton
 refreshedLogo.keyDown(with: projectKey(123))
 expect((launcher.panel.firstResponder as? ProjectShortcutButton)?.tag == 0, "logo arrow navigation continues after background refresh")
+
+let faces = launcher.panel.contentView as! LauncherFaces
+let reverseBack = descendants(faces.reverse).compactMap { $0 as? ProjectShortcutButton }.first { $0.tag == -2 }!
+expect(header.font?.pointSize == 23 && dragSurfaces.map(\.frame.width).min() == 26, "search text and magnifying glass are slightly smaller")
+let rightmostLogo = descendants(faces.front).compactMap { $0 as? ProjectShortcutButton }.filter { $0.tag >= 0 }.max { $0.tag < $1.tag }!
+let divider = descendants(faces.front).compactMap { $0 as? NSBox }.first { $0.boxType == .separator }!
+expect(rightmostLogo.convert(rightmostLogo.bounds, to: content).maxX < divider.convert(divider.bounds, to: content).minX && divider.frame.maxX < settingsButton.frame.minX,
+       "divider separates project logos from settings without changing their order")
+header.stringValue = "zzzzzzzzzz"
+launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
+content.layoutSubtreeIfNeeded()
+let compactSearchFrame = launcher.panel.frame
+captureEvidence(faces, name: "search-hidden-native.png")
+settingsButton.performClick(nil)
+content.layoutSubtreeIfNeeded()
+captureEvidence(faces, name: "settings-hidden-native.png")
+expect(faces.showingBack && faces.front.isHidden && !faces.reverse.isHidden, "settings reveals the reverse face without foregrounding the panel")
+expect(launcher.panel.frame == compactSearchFrame, "revealing settings preserves the window bounds")
+let swatches = descendants(faces.reverse).compactMap { $0 as? ProjectShortcutButton }.filter { $0.tag <= -10 }
+expect(swatches.count == HighlightColor.allCases.count && swatches.allSatisfy { faces.reverse.bounds.contains($0.convert($0.bounds, to: faces.reverse)) }, "highlight controls fit even the smallest search window")
+expect(launcher.panel.firstResponder === reverseBack, "reverse face starts with keyboard focus on Back to search")
+reverseBack.performClick(nil)
+expect(!faces.showingBack && faces.reverse.isHidden && header.stringValue == "zzzzzzzzzz", "flipping back retains the current search query")
+
+faces.setShowingBack(true, animated: true, reduceMotion: false)
+let rotation = faces.front.layer?.animation(forKey: "launcher-face") as? CAKeyframeAnimation
+let finalRotation = (rotation?.values?.last as? NSValue)?.caTransform3DValue
+expect(rotation?.keyPath == "transform" && rotation?.duration == 0.28 && abs((finalRotation?.m11 ?? 0) + 1) < 0.0001, "normal motion uses a 180-degree layer rotation")
+let panelCenter = CGPoint(x: faces.bounds.midX, y: faces.bounds.midY)
+expect((rotation?.values as? [NSValue])?.allSatisfy { value in
+    let transform = value.caTransform3DValue
+    let x = panelCenter.x * transform.m11 + panelCenter.y * transform.m21 + transform.m41
+    let y = panelCenter.x * transform.m12 + panelCenter.y * transform.m22 + transform.m42
+    let z = panelCenter.x * transform.m13 + panelCenter.y * transform.m23 + transform.m43
+    return abs(x - panelCenter.x) < 0.0001 && abs(y - panelCenter.y) < 0.0001 && abs(z) < 0.0001
+} == true, "every intermediate flip transform keeps the panel center fixed")
+faces.setShowingBack(false, animated: false)
+let settleDeadline = Date().addingTimeInterval(0.4)
+while Date() < settleDeadline { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
+expect(!faces.showingBack && !faces.front.isHidden && faces.reverse.isHidden, "cancelled flip completions cannot reveal a stale face")
+faces.setShowingBack(true, animated: true, reduceMotion: true)
+let fade = faces.front.layer?.animation(forKey: "launcher-face") as? CABasicAnimation
+expect(fade?.keyPath == "opacity" && fade?.duration == 0.08 && CATransform3DIsIdentity(faces.front.layer!.transform), "Reduce Motion substitutes a short fade for rotation")
+faces.setShowingBack(false, animated: false)
+
+let appearanceSuite = "QuickLaunchAppearanceChecks.\(UUID().uuidString)"
+let appearanceDefaults = UserDefaults(suiteName: appearanceSuite)!
+defer { appearanceDefaults.removePersistentDomain(forName: appearanceSuite) }
+let appearance = LauncherAppearance(defaults: appearanceDefaults)
+expect(appearance.highlight == .system, "highlight defaults to the macOS accent")
+appearance.choose(.purple)
+expect(LauncherAppearance(defaults: appearanceDefaults).highlight == .purple, "chosen highlight persists between launches")
