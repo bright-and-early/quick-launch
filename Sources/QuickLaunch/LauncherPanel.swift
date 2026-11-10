@@ -10,6 +10,10 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
     let panel: SearchPanel
     private let field = NSTextField()
     private let rows = NSStackView()
+    private let projectButtons = NSStackView()
+    private var projectApplications: [Application] = []
+    private var fieldTrailingToProjects: NSLayoutConstraint!
+    private var fieldTrailingToEdge: NSLayoutConstraint!
     private let content = NSVisualEffectView()
     private let emptyLabel = NSTextField(labelWithString: "")
     private var applications: [Application] = []
@@ -55,6 +59,16 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         field.setAccessibilityLabel("Search applications")
         field.delegate = self
         content.addSubview(field)
+        projectButtons.orientation = .horizontal
+        projectButtons.spacing = 8
+        projectButtons.alignment = .centerY
+        projectButtons.translatesAutoresizingMaskIntoConstraints = false
+        projectButtons.setContentHuggingPriority(.required, for: .horizontal)
+        projectButtons.setContentCompressionResistancePriority(.required, for: .horizontal)
+        projectButtons.isHidden = true
+        content.addSubview(projectButtons)
+        fieldTrailingToProjects = field.trailingAnchor.constraint(equalTo: projectButtons.leadingAnchor, constant: -16)
+        fieldTrailingToEdge = field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22)
         rows.orientation = .vertical
         rows.spacing = 4
         rows.alignment = .leading
@@ -66,7 +80,9 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
             symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 22),
             symbol.widthAnchor.constraint(equalToConstant: 32), symbol.heightAnchor.constraint(equalToConstant: 32),
             field.leadingAnchor.constraint(equalTo: symbol.trailingAnchor, constant: 16),
-            field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            fieldTrailingToEdge,
+            projectButtons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            projectButtons.centerYAnchor.constraint(equalTo: field.centerYAnchor),
             field.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             field.heightAnchor.constraint(equalToConstant: 38),
             rows.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
@@ -84,6 +100,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.applications = inventory
+                self.updateProjectShortcuts()
                 self.scanning = false
                 self.lastScan = Date()
                 self.updateResults()
@@ -165,10 +182,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
                 row.target = self
                 row.action = #selector(clickRow(_:))
                 row.setAccessibilityLabel(application.name)
-                let icon: NSImage
-                if let cached = icons[application.url] { icon = cached }
-                else { icon = NSWorkspace.shared.icon(forFile: application.url.path); icons[application.url] = icon }
-                let image = NSImageView(image: icon)
+                let image = NSImageView(image: appIcon(for: application))
                 image.imageScaling = .scaleProportionallyUpOrDown
                 image.translatesAutoresizingMaskIntoConstraints = false
                 let name = NSTextField(labelWithString: application.name)
@@ -199,10 +213,50 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
     }
 
+    private func appIcon(for application: Application) -> NSImage {
+        if let cached = icons[application.url] { return cached }
+        let image = NSWorkspace.shared.icon(forFile: application.url.path)
+        icons[application.url] = image
+        return image
+    }
+
+    private func updateProjectShortcuts() {
+        for button in projectButtons.arrangedSubviews {
+            projectButtons.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+        projectApplications = ProjectShortcuts.applications(in: applications)
+        for (index, application) in projectApplications.enumerated() {
+            let button = NSButton(image: appIcon(for: application), target: self, action: #selector(clickProject(_:)))
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyUpOrDown
+            button.refusesFirstResponder = true
+            button.toolTip = application.name
+            button.setAccessibilityLabel("Open \(application.name)")
+            button.tag = index
+            projectButtons.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        }
+        let hasProjects = !projectApplications.isEmpty
+        fieldTrailingToEdge.isActive = !hasProjects
+        fieldTrailingToProjects.isActive = hasProjects
+        projectButtons.isHidden = !hasProjects
+    }
+
+    @objc private func clickProject(_ sender: NSButton) {
+        guard projectApplications.indices.contains(sender.tag) else { return }
+        openApplication(projectApplications[sender.tag])
+    }
+
     @objc private func clickRow(_ sender: NSButton) { selected = sender.tag; launchSelection() }
     private func launchSelection() {
         guard matches.indices.contains(selected) else { return }
-        let app = matches[selected]
+        openApplication(matches[selected])
+    }
+
+    private func openApplication(_ app: Application) {
         dismiss()
         onLaunch?(app)
         NSWorkspace.shared.openApplication(at: app.url, configuration: .init()) { _, error in

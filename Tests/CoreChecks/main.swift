@@ -44,3 +44,13 @@ let dragged = PanelPlacement.fitted(CGRect(x: -500, y: -300, width: 640, height:
 expect(visible.contains(dragged), "resizing after drag is clamped")
 expect(PanelPlacement.resultLimit(in: CGRect(x: 0, y: 0, width: 800, height: 400)) == 5, "small display caps visible result count")
 print("PASS: placement checks; total \(checks)")
+
+let projectsDirectory = URL(fileURLWithPath: "/Users/test/Applications")
+let projectApps = ["Menagerie", "Quick Launch", "AppLab", "Gimme Job", "Atlas", "Matterlab"].map {
+    Application(name: $0, url: projectsDirectory.appendingPathComponent("\($0).app"))
+}
+let shortcuts = ProjectShortcuts.applications(in: projectApps + [app("Other"), app("AppLab")], directory: projectsDirectory)
+expect(shortcuts.map(\.name) == ["AppLab", "Atlas", "Gimme Job", "Matterlab", "Menagerie"], "only installed project apps in stable shortcut order")
+expect(ProjectShortcuts.applications(in: [projectApps[0]], directory: projectsDirectory).map(\.name) == ["Menagerie"], "missing project apps omitted")
+expect(ProjectShortcuts.applications(in: [app("AppLab")], directory: projectsDirectory).isEmpty, "unrelated same-name app excluded")
+print("PASS: project shortcut checks; total \(checks)")
