@@ -6,5 +6,5 @@ let package = Package(
     targets: [
         .target(name: "QuickLaunchCore"),
         .executableTarget(name: "QuickLaunch", dependencies: ["QuickLaunchCore"]),
-        .testTarget(name: "QuickLaunchCoreTests", dependencies: ["QuickLaunchCore"])
+        .executableTarget(name: "CoreChecks", dependencies: ["QuickLaunchCore"], path: "Tests/CoreChecks")
     ])
