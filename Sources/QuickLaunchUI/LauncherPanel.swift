@@ -326,7 +326,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
             body.widthAnchor.constraint(equalTo: settingsScroll.contentView.widthAnchor),
             body.heightAnchor.constraint(equalToConstant: 300),
             settingsButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
-            settingsButton.topAnchor.constraint(equalTo: content.topAnchor, constant: 23),
+            settingsButton.topAnchor.constraint(equalTo: content.topAnchor, constant: 22),
             settingsButton.widthAnchor.constraint(equalToConstant: 32), settingsButton.heightAnchor.constraint(equalToConstant: 32),
             settingsDivider.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -10),
             settingsDivider.centerYAnchor.constraint(equalTo: settingsButton.centerYAnchor),

@@ -299,3 +299,8 @@ if !dismissPanel.performKeyEquivalent(with: commandQ) { _ = recorderMenu.perform
 expect(menuSpy.activations == 0 && recorder.title == "⌘Q" && !recorder.isRecording, "recording intercepts Command-Q before a real menu key equivalent")
 _ = recorderMenu.performKeyEquivalent(with: commandQ)
 expect(menuSpy.activations == 1, "the menu fixture remains functional outside shortcut recording")
+
+let searchAreaTop = faces.front.isFlipped ? faces.front.bounds.minY : faces.front.bounds.maxY
+let resultsAreaTop = faces.front.isFlipped ? scroll.frame.minY : scroll.frame.maxY
+let searchAreaCenter = (searchAreaTop + resultsAreaTop) / 2
+expect(abs(header.frame.midY - searchAreaCenter) < 0.5 && abs(iconSurface.frame.midY - searchAreaCenter) < 0.5, "search icon and rendered input are centered in the top search area")
