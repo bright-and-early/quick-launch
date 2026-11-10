@@ -12,7 +12,7 @@ The index reads app bundles only under `/Applications`, `/System/Applications`, 
 
 The initial app list is alphabetical. Successful opens through Quick Launch are counted locally and saved between launches; the empty search list orders by most opens, then alphabetically. Typed searches keep match relevance first, then use open count and alphabetical order to break ties. Project-logo opens and restores count; hiding a project, cancelled transitions, and failed launches do not. Opens outside Quick Launch are not monitored.
 
-The gear after the project logos flips the launcher 180° to its reverse settings face. Choose a highlight color (System accent, Blue, Purple, Pink, Orange, or Green); the choice is saved locally and applies to result selection and keyboard-focus accents. **Back to search** flips back without clearing the query. The turn lasts 280 ms; Reduce Motion uses an 80 ms fade. Escape or an outside click dismisses either face, and the next opening starts on search.
+The gear after the project logos flips the launcher 180° to its reverse settings face. Choose a highlight color (System accent, Blue, Indigo, Purple, Pink, Coral, Orange, Amber, Lime, Green, Teal, or Cyan); the choice is saved locally and applies to result selection and keyboard-focus accents. **Back to search** flips back without clearing the query. The turn lasts 280 ms; Reduce Motion uses an 80 ms fade. Escape or an outside click dismisses either face, and the next opening starts on search.
 
 ## Build and install
 
