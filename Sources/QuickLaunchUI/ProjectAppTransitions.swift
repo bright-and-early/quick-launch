@@ -36,9 +36,12 @@ final class ProjectAppTransitions {
         // This path only runs after a deliberate project-logo click, never at startup.
         if !reduceMotion && !requestedPermission && !CGPreflightScreenCaptureAccess() { requestPermission() }
         let canCapture = CGPreflightScreenCaptureAccess()
-        task = Task { @MainActor [weak self] in
+        task = ProjectTransitionTask.start(completion: { [weak self] in
+            self?.task = nil
+            self?.restoreOnCancel = nil
+            completion()
+        }) { [weak self] in
             guard let self = self else { return }
-            defer { self.task = nil; self.restoreOnCancel = nil; completion() }
             do {
                 let running = NSWorkspace.shared.runningApplications.first {
                     $0.bundleURL?.resolvingSymlinksInPath() == application.url.resolvingSymlinksInPath() && !$0.isTerminated
@@ -86,7 +89,8 @@ final class ProjectAppTransitions {
                     _ = target.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
                 }
             } catch is CancellationError {
-                // Escape/outside-click cancellation never steals focus back.
+                // Cancellation never steals focus back. If a launch already began,
+                // its hidden application stays hidden until the next deliberate click.
             } catch {
                 guard !Task.isCancelled else { return }
                 let alert = NSAlert()

@@ -82,3 +82,16 @@ let plan = WindowTransitionPlan(window: CGRect(x: 0, y: 100, width: 800, height:
 expect(plan.overlay.contains(CGRect(x: 0, y: 100, width: 800, height: 600)) && plan.overlay.contains(CGRect(x: 900, y: 750, width: 32, height: 32)), "animation overlay contains both actual window and clicked logo")
 expect(plan.expanded.width == 800 && plan.collapsed.width == 32, "window animation preserves the requested endpoints")
 expect(WindowTransitionPlan(window: .zero, icon: .zero) == nil, "invalid snapshot geometry skips the animation")
+
+var injectedLaunches = 0
+var transitionCompletions = 0
+let cancelledTransition = ProjectTransitionTask.start(completion: { transitionCompletions += 1 }) {
+    injectedLaunches += 1
+}
+cancelledTransition.cancel()
+let cancellationDeadline = Date().addingTimeInterval(2)
+while transitionCompletions == 0 && Date() < cancellationDeadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+}
+expect(injectedLaunches == 0, "cancellation before the scheduled transition prevents app launch")
+expect(transitionCompletions == 1, "cancelled transition still releases its busy state exactly once")
