@@ -95,3 +95,53 @@ while transitionCompletions == 0 && Date() < cancellationDeadline {
 }
 expect(injectedLaunches == 0, "cancellation before the scheduled transition prevents app launch")
 expect(transitionCompletions == 1, "cancelled transition still releases its busy state exactly once")
+
+let projectLogos = descendants(content).compactMap { $0 as? ProjectShortcutButton }.sorted { $0.tag < $1.tag }
+expect(projectLogos.count >= 2, "installed project logos accept keyboard focus")
+editor.string = "A🚀"
+editor.setSelectedRange(NSRange(location: 1, length: 0))
+expect(!launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.moveRight(_:))), "Right Arrow inside search text keeps normal caret movement")
+editor.setSelectedRange(NSRange(location: 1, length: 2))
+expect(!launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.moveRight(_:))), "Right Arrow with selected text keeps native selection behavior")
+editor.setSelectedRange(NSRange(location: 3, length: 0))
+expect(launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.moveRight(_:))) && launcher.panel.firstResponder === projectLogos[0], "Right Arrow at the UTF-16 text end focuses the first project logo")
+func projectKey(_ code: UInt16, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+    NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: launcher.panel.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!
+}
+projectLogos[0].keyDown(with: projectKey(124))
+expect(launcher.panel.firstResponder === projectLogos[1], "Right Arrow moves to the next project logo")
+projectLogos[1].keyDown(with: projectKey(123))
+expect(launcher.panel.firstResponder === projectLogos[0], "Left Arrow moves to the previous project logo")
+projectLogos[0].keyDown(with: projectKey(48))
+expect(launcher.panel.firstResponder === projectLogos[1], "Tab traverses project logos")
+projectLogos[1].keyDown(with: projectKey(48, modifiers: .shift))
+expect(launcher.panel.firstResponder === projectLogos[0], "Shift-Tab traverses project logos backwards")
+projectLogos[0].keyDown(with: projectKey(123))
+expect(launcher.panel.firstResponder !== projectLogos[0] && header.currentEditor()?.selectedRange == NSRange(location: 0, length: 0), "Left Arrow from the first logo restores search focus at the text end")
+_ = launcher.panel.makeFirstResponder(projectLogos.last!)
+projectLogos.last!.keyDown(with: projectKey(124))
+expect(launcher.panel.firstResponder === projectLogos.last!, "Right Arrow at the last logo stays within the project group")
+projectLogos.last!.keyDown(with: projectKey(48))
+expect(launcher.panel.firstResponder !== projectLogos.last!, "Tab after the last project returns to search")
+final class ProjectActionSpy: NSObject {
+    var activations = 0
+    @objc func activate(_ sender: Any?) { activations += 1 }
+}
+let actionSpy = ProjectActionSpy()
+let actionButton = ProjectShortcutButton(title: "", target: actionSpy, action: #selector(ProjectActionSpy.activate(_:)))
+actionButton.keyDown(with: projectKey(36))
+actionButton.keyDown(with: projectKey(49))
+expect(actionSpy.activations == 2, "Return and Space activate the focused project without using any real application")
+
+_ = launcher.panel.makeFirstResponder(projectLogos[1])
+let focusedProjectName = projectLogos[1].toolTip
+launcher.refreshIndex(force: true)
+let refreshDeadline = Date().addingTimeInterval(10)
+while projectLogos[1].superview != nil && Date() < refreshDeadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+}
+expect(projectLogos[1].superview == nil && (launcher.panel.firstResponder as? ProjectShortcutButton)?.toolTip == focusedProjectName,
+       "background index refresh preserves keyboard focus on the same project")
+let refreshedLogo = launcher.panel.firstResponder as! ProjectShortcutButton
+refreshedLogo.keyDown(with: projectKey(123))
+expect((launcher.panel.firstResponder as? ProjectShortcutButton)?.tag == 0, "logo arrow navigation continues after background refresh")

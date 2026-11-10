@@ -6,6 +6,8 @@ Press **Command–Space**, type an application name or abbreviation, then press 
 
 The search row also shows project logos for AppLab, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking brings that app forward, or hides it if it was already frontmost. Atlas remains searchable but is not pinned. Escape closes the launcher from any control, and clicking outside dismisses it.
 
+Press **Right Arrow** with the caret at the end of the search text to focus the first project logo. **Left/Right Arrow** or **Tab/Shift–Tab** move between logos; **Return** or **Space** activates the focused logo. Left Arrow from the first logo or Tab after the last returns to search. Hover adds a subtle background, and keyboard focus adds an accent outline. Tab in the search field still completes the selected application name.
+
 The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
 ## Build and install

@@ -238,6 +238,11 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
 
     public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
+        case #selector(NSResponder.moveRight(_:)), #selector(NSResponder.moveForward(_:)):
+            let range = textView.selectedRange()
+            guard range.length == 0, range.location == (textView.string as NSString).length,
+                  let first = projectButtons.arrangedSubviews.first else { return false }
+            return panel.makeFirstResponder(first)
         case #selector(NSResponder.moveDown(_:)):
             moveSelection(by: 1); return true
         case #selector(NSResponder.moveUp(_:)):
@@ -321,17 +326,22 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func updateProjectShortcuts() {
+        let focusedURL = (panel.firstResponder as? ProjectShortcutButton).flatMap { button in
+            projectApplications.indices.contains(button.tag) ? projectApplications[button.tag].url : nil
+        }
         for button in projectButtons.arrangedSubviews {
             projectButtons.removeArrangedSubview(button)
             button.removeFromSuperview()
         }
         projectApplications = ProjectShortcuts.applications(in: applications)
         for (index, application) in projectApplications.enumerated() {
-            let button = NSButton(image: appIcon(for: application), target: self, action: #selector(clickProject(_:)))
+            let button = ProjectShortcutButton(image: appIcon(for: application), target: self, action: #selector(clickProject(_:)))
             button.isBordered = false
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyUpOrDown
-            button.refusesFirstResponder = true
+            button.refusesFirstResponder = false
+            button.focusRingType = .none
+            button.navigate = { [weak self] offset, tab in self?.moveProjectFocus(from: index, by: offset, tab: tab) }
             button.toolTip = application.name
             button.setAccessibilityLabel("Toggle \(application.name)")
             button.tag = index
@@ -343,6 +353,25 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         fieldTrailingToEdge.isActive = !hasProjects
         fieldTrailingToProjects.isActive = hasProjects
         projectButtons.isHidden = !hasProjects
+        if let focusedURL = focusedURL {
+            if let index = projectApplications.firstIndex(where: { $0.url == focusedURL }) {
+                panel.makeFirstResponder(projectButtons.arrangedSubviews[index])
+            } else { focusSearch() }
+        }
+    }
+
+    private func focusSearch() {
+        panel.makeFirstResponder(field)
+        field.currentEditor()?.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0)
+    }
+
+    private func moveProjectFocus(from index: Int, by offset: Int, tab: Bool) {
+        let next = index + offset
+        if next < 0 || (tab && next >= projectButtons.arrangedSubviews.count) {
+            focusSearch()
+        } else if projectButtons.arrangedSubviews.indices.contains(next) {
+            panel.makeFirstResponder(projectButtons.arrangedSubviews[next])
+        }
     }
 
     @objc private func clickProject(_ sender: NSButton) {
