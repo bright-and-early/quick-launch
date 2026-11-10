@@ -26,6 +26,7 @@ let table = views.compactMap { $0 as? NSTableView }.first!
 let deadline = Date().addingTimeInterval(10)
 while table.numberOfRows == 0 && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
 content.layoutSubtreeIfNeeded()
+captureEvidence(content, name: "apps-hidden-native.png")
 expect(table.numberOfRows > 8, "first empty query retains apps beyond the visible eight")
 let scroll = table.enclosingScrollView!
 let initialY = scroll.contentView.bounds.minY

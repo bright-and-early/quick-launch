@@ -21,17 +21,13 @@ final class ResultRowView: NSTableRowView {
 final class ApplicationResultCell: NSTableCellView {
     private let appImage = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
-    private let pathLabel = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         appImage.imageScaling = .scaleProportionallyUpOrDown
         nameLabel.font = .systemFont(ofSize: 16, weight: .medium)
         nameLabel.lineBreakMode = .byTruncatingTail
-        pathLabel.font = .systemFont(ofSize: 11)
-        pathLabel.textColor = .secondaryLabelColor
-        pathLabel.lineBreakMode = .byTruncatingMiddle
-        for view in [appImage, nameLabel, pathLabel] {
+        for view in [appImage, nameLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -42,11 +38,8 @@ final class ApplicationResultCell: NSTableCellView {
             appImage.centerYAnchor.constraint(equalTo: centerYAnchor),
             appImage.widthAnchor.constraint(equalToConstant: 40), appImage.heightAnchor.constraint(equalToConstant: 40),
             nameLabel.leadingAnchor.constraint(equalTo: appImage.trailingAnchor, constant: 12),
-            nameLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            nameLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            pathLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            pathLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 3),
-            pathLabel.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor)
+            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            nameLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
         ])
     }
 
@@ -54,7 +47,6 @@ final class ApplicationResultCell: NSTableCellView {
 
     func configure(_ application: Application, icon: NSImage) {
         nameLabel.stringValue = application.name
-        pathLabel.stringValue = application.url.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         appImage.image = icon
     }
 }
