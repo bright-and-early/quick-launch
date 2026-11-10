@@ -23,10 +23,10 @@ public final class ProjectShortcutButton: NSButton {
         let focused = window?.firstResponder === self
         if pointerInside || focused {
             let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 7, yRadius: 7)
-            (focused ? NSColor.controlAccentColor.withAlphaComponent(0.22) : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
+            (focused ? LauncherAppearance.shared.highlight.color.withAlphaComponent(0.22) : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
             shape.fill()
             if focused {
-                NSColor.controlAccentColor.setStroke()
+                LauncherAppearance.shared.highlight.color.setStroke()
                 shape.lineWidth = 2
                 shape.stroke()
             }

@@ -6,11 +6,13 @@ Press **Command–Space**, type an application name or abbreviation, then press 
 
 The search row also shows project logos for AppLab, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking brings that app forward, or hides it if it was already frontmost. Atlas remains searchable but is not pinned. Escape closes the launcher from any control, and clicking outside dismisses it.
 
-Press **Right Arrow** with the caret at the end of the search text to focus the first project logo. **Left/Right Arrow** or **Tab/Shift–Tab** move between logos; **Return** or **Space** activates the focused logo. Left Arrow from the first logo or Tab after the last returns to search. Hover adds a subtle background, and keyboard focus adds an accent outline. Tab in the search field still completes the selected application name.
+Press **Right Arrow** with the caret at the end of the search text to focus the first project logo. **Left/Right Arrow** or **Tab/Shift–Tab** move between logos; **Return** or **Space** activates the focused logo. Left Arrow from the first logo returns to search; Right Arrow or Tab after the last logo reaches Settings, and Tab after Settings returns to search. Hover adds a subtle background, and keyboard focus adds an accent outline. Tab in the search field still completes the selected application name.
 
 The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
 The initial app list is alphabetical. Successful opens through Quick Launch are counted locally and saved between launches; the empty search list orders by most opens, then alphabetically. Typed searches keep match relevance first, then use open count and alphabetical order to break ties. Project-logo opens and restores count; hiding a project, cancelled transitions, and failed launches do not. Opens outside Quick Launch are not monitored.
+
+The gear after the project logos flips the launcher 180° to its reverse settings face. Choose a highlight color (System accent, Blue, Purple, Pink, Orange, or Green); the choice is saved locally and applies to result selection and keyboard-focus accents. **Back to search** flips back without clearing the query. The turn lasts 280 ms; Reduce Motion uses an 80 ms fade. Escape or an outside click dismisses either face, and the next opening starts on search.
 
 ## Build and install
 

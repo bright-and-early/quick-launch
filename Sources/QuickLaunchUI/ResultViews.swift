@@ -13,7 +13,7 @@ public final class DragSurface: NSView {
 
 final class ResultRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
-        NSColor.selectedContentBackgroundColor.withAlphaComponent(0.22).setFill()
+        LauncherAppearance.shared.highlight.color.withAlphaComponent(0.22).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
     }
 }
