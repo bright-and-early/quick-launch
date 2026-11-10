@@ -31,6 +31,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
         panel.delegate = self
         panel.title = "Quick Launch"
         content.material = .hudWindow

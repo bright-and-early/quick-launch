@@ -2,9 +2,9 @@
 
 A small native macOS application launcher written in Swift and AppKit. No third-party dependencies, web runtime, Spotlight queries, document search, or network access.
 
-Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Click the menu bar magnifying glass to open the launcher or quit.
+Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Drag the window by its background to reposition it. Click the menu bar magnifying glass to open the launcher or quit.
 
-The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips hidden files, symbolic links, and the contents of app bundles. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
+The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips hidden files, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
 ## Build and install
 

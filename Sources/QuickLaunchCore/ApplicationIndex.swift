@@ -32,12 +32,14 @@ public enum ApplicationIndex {
                 let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 if values?.isSymbolicLink == true {
                     enumerator.skipDescendants()
-                    continue
-                }
-                guard values?.isDirectory == true else { continue }
+                    // Safari is an app link into the sealed system Cryptex. Index
+                    // the link itself, never enumerate its destination directory.
+                    guard url.pathExtension.lowercased() == "app",
+                          (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+                } else if values?.isDirectory != true { continue }
                 if url.pathExtension.lowercased() == "app" {
                     enumerator.skipDescendants()
-                    guard seen.insert(url.standardizedFileURL.path).inserted else { continue }
+                    guard seen.insert(url.resolvingSymlinksInPath().standardizedFileURL.path).inserted else { continue }
                     let bundle = Bundle(url: url)
                     let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
                         ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
