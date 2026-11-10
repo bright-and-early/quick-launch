@@ -43,6 +43,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
 
         let symbol = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)!)
         symbol.contentTintColor = .secondaryLabelColor
+        symbol.imageScaling = .scaleProportionallyUpOrDown
         symbol.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(symbol)
         field.translatesAutoresizingMaskIntoConstraints = false
@@ -168,6 +169,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
                 if let cached = icons[application.url] { icon = cached }
                 else { icon = NSWorkspace.shared.icon(forFile: application.url.path); icons[application.url] = icon }
                 let image = NSImageView(image: icon)
+                image.imageScaling = .scaleProportionallyUpOrDown
                 image.translatesAutoresizingMaskIntoConstraints = false
                 let name = NSTextField(labelWithString: application.name)
                 name.font = .systemFont(ofSize: 16, weight: .medium)
