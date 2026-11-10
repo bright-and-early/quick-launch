@@ -1,15 +1,18 @@
 import AppKit
 import QuickLaunchCore
 
-final class SearchPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+public final class SearchPanel: NSPanel {
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { false }
 }
 
-final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
-    let panel: SearchPanel
+public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
+    public let panel: SearchPanel
     private let field = NSTextField()
-    private let rows = NSStackView()
+    private let resultsScroll = NSScrollView()
+    private let resultsTable = NSTableView()
+    private let emptySearchDrag = DragSurface()
+    private let iconDrag = DragSurface()
     private let projectButtons = NSStackView()
     private var projectApplications: [Application] = []
     private var fieldTrailingToProjects: NSLayoutConstraint!
@@ -24,7 +27,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
     private var lastScan = Date.distantPast
     var onLaunch: ((Application) -> Void)?
 
-    override init() {
+    public override init() {
         panel = SearchPanel(contentRect: NSRect(x: 0, y: 0, width: 640, height: 78),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
@@ -59,6 +62,14 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         field.setAccessibilityLabel("Search applications")
         field.delegate = self
         content.addSubview(field)
+        emptySearchDrag.focusField = field
+        emptySearchDrag.translatesAutoresizingMaskIntoConstraints = false
+        emptySearchDrag.setAccessibilityElement(false)
+        content.addSubview(emptySearchDrag)
+        iconDrag.focusField = field
+        iconDrag.translatesAutoresizingMaskIntoConstraints = false
+        iconDrag.setAccessibilityElement(false)
+        content.addSubview(iconDrag)
         projectButtons.orientation = .horizontal
         projectButtons.spacing = 8
         projectButtons.alignment = .centerY
@@ -69,12 +80,40 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         content.addSubview(projectButtons)
         fieldTrailingToProjects = field.trailingAnchor.constraint(equalTo: projectButtons.leadingAnchor, constant: -16)
         fieldTrailingToEdge = field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22)
-        rows.orientation = .vertical
-        rows.spacing = 4
-        rows.alignment = .leading
-        rows.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(rows)
-        emptyLabel.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        resultsScroll.translatesAutoresizingMaskIntoConstraints = false
+        resultsScroll.drawsBackground = false
+        resultsScroll.borderType = .noBorder
+        resultsScroll.hasVerticalScroller = true
+        resultsScroll.autohidesScrollers = true
+        resultsScroll.hasHorizontalScroller = false
+        resultsScroll.horizontalScrollElasticity = .none
+        resultsScroll.automaticallyAdjustsContentInsets = false
+        resultsTable.headerView = nil
+        resultsTable.backgroundColor = .clear
+        resultsTable.style = .plain
+        resultsTable.rowHeight = 54
+        resultsTable.intercellSpacing = NSSize(width: 0, height: 4)
+        resultsTable.usesAutomaticRowHeights = false
+        resultsTable.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        resultsTable.autoresizingMask = [.width]
+        resultsTable.focusRingType = .none
+        resultsTable.allowsMultipleSelection = false
+        resultsTable.allowsColumnResizing = false
+        resultsTable.allowsColumnReordering = false
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("applications"))
+        column.width = 620
+        column.minWidth = 1
+        resultsTable.addTableColumn(column)
+        resultsTable.dataSource = self
+        resultsTable.delegate = self
+        resultsTable.target = self
+        resultsTable.action = #selector(clickResult(_:))
+        resultsScroll.documentView = resultsTable
+        content.addSubview(resultsScroll)
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.font = .systemFont(ofSize: 14)
+        content.addSubview(emptyLabel)
         NSLayoutConstraint.activate([
             symbol.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 22),
             symbol.topAnchor.constraint(equalTo: content.topAnchor, constant: 22),
@@ -85,14 +124,27 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
             projectButtons.centerYAnchor.constraint(equalTo: field.centerYAnchor),
             field.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             field.heightAnchor.constraint(equalToConstant: 38),
-            rows.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
-            rows.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -10),
-            rows.topAnchor.constraint(equalTo: content.topAnchor, constant: 76)
+            emptySearchDrag.leadingAnchor.constraint(equalTo: field.leadingAnchor),
+            emptySearchDrag.trailingAnchor.constraint(equalTo: field.trailingAnchor),
+            emptySearchDrag.topAnchor.constraint(equalTo: field.topAnchor),
+            emptySearchDrag.bottomAnchor.constraint(equalTo: field.bottomAnchor),
+            iconDrag.leadingAnchor.constraint(equalTo: symbol.leadingAnchor),
+            iconDrag.trailingAnchor.constraint(equalTo: symbol.trailingAnchor),
+            iconDrag.topAnchor.constraint(equalTo: symbol.topAnchor),
+            iconDrag.bottomAnchor.constraint(equalTo: symbol.bottomAnchor),
+            resultsScroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
+            resultsScroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -10),
+            resultsScroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 76),
+            resultsScroll.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
+            emptyLabel.leadingAnchor.constraint(equalTo: resultsScroll.leadingAnchor, constant: 12),
+            emptyLabel.trailingAnchor.constraint(equalTo: resultsScroll.trailingAnchor, constant: -12),
+            emptyLabel.topAnchor.constraint(equalTo: resultsScroll.topAnchor),
+            emptyLabel.heightAnchor.constraint(equalToConstant: 44)
         ])
         refreshIndex(force: true)
     }
 
-    func refreshIndex(force: Bool = false) {
+    public func refreshIndex(force: Bool = false) {
         guard !scanning, force || Date().timeIntervalSince(lastScan) > 30 else { return }
         scanning = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -108,7 +160,7 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         }
     }
 
-    func toggle() {
+    public func toggle() {
         if panel.isVisible { dismiss(); return }
         refreshIndex()
         field.stringValue = ""
@@ -129,18 +181,18 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
     }
 
     func dismiss() { panel.orderOut(nil) }
-    func windowDidResignKey(_ notification: Notification) { dismiss() }
-    func controlTextDidChange(_ obj: Notification) {
+    public func windowDidResignKey(_ notification: Notification) { dismiss() }
+    public func controlTextDidChange(_ obj: Notification) {
         selected = 0
         updateResults()
     }
 
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+    public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.moveDown(_:)):
-            selected = min(matches.count - 1, selected + 1); drawRows(); return true
+            moveSelection(by: 1); return true
         case #selector(NSResponder.moveUp(_:)):
-            selected = max(0, selected - 1); drawRows(); return true
+            moveSelection(by: -1); return true
         case #selector(NSResponder.insertNewline(_:)):
             launchSelection(); return true
         case #selector(NSResponder.cancelOperation(_:)):
@@ -157,60 +209,59 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
     }
 
     private func updateResults() {
-        let area = targetScreen.visibleFrame
-        matches = AppSearch.results(for: field.stringValue, in: applications, limit: PanelPlacement.resultLimit(in: area))
+        matches = AppSearch.results(for: field.stringValue, in: applications, limit: applications.count)
+        emptySearchDrag.isHidden = !field.stringValue.isEmpty
         selected = max(0, min(selected, matches.count - 1))
         drawRows()
     }
 
     private func drawRows() {
-        for view in rows.arrangedSubviews { rows.removeArrangedSubview(view); view.removeFromSuperview() }
-        if matches.isEmpty {
-            emptyLabel.stringValue = scanning ? "Loading applications…" : "No applications found"
-            emptyLabel.textColor = .secondaryLabelColor
-            emptyLabel.font = .systemFont(ofSize: 14)
-            rows.addArrangedSubview(emptyLabel)
-        } else {
-            for (index, application) in matches.enumerated() {
-                let row = NSButton()
-                row.title = ""
-                row.isBordered = false
-                row.wantsLayer = true
-                row.layer?.cornerRadius = 9
-                row.layer?.backgroundColor = (index == selected ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.22) : .clear).cgColor
-                row.tag = index
-                row.target = self
-                row.action = #selector(clickRow(_:))
-                row.setAccessibilityLabel(application.name)
-                let image = NSImageView(image: appIcon(for: application))
-                image.imageScaling = .scaleProportionallyUpOrDown
-                image.translatesAutoresizingMaskIntoConstraints = false
-                let name = NSTextField(labelWithString: application.name)
-                name.font = .systemFont(ofSize: 16, weight: .medium)
-                name.lineBreakMode = .byTruncatingTail
-                name.translatesAutoresizingMaskIntoConstraints = false
-                let path = NSTextField(labelWithString: application.url.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                path.font = .systemFont(ofSize: 11)
-                path.textColor = .secondaryLabelColor
-                path.lineBreakMode = .byTruncatingMiddle
-                path.translatesAutoresizingMaskIntoConstraints = false
-                for view in [image, name, path] { row.addSubview(view) }
-                rows.addArrangedSubview(row)
-                NSLayoutConstraint.activate([
-                    row.widthAnchor.constraint(equalTo: rows.widthAnchor), row.heightAnchor.constraint(equalToConstant: 54),
-                    image.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 12), image.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                    image.widthAnchor.constraint(equalToConstant: 40), image.heightAnchor.constraint(equalToConstant: 40),
-                    name.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 12), name.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
-                    name.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -12),
-                    path.leadingAnchor.constraint(equalTo: name.leadingAnchor), path.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 3),
-                    path.trailingAnchor.constraint(equalTo: name.trailingAnchor)
-                ])
-            }
-        }
-        let height = CGFloat(76 + (matches.isEmpty ? 44 : matches.count * 58) + 10)
+        let visibleCount = min(matches.count, PanelPlacement.resultLimit(in: targetScreen.visibleFrame))
+        let height = CGFloat(76 + (matches.isEmpty ? 44 : visibleCount * 58) + 10)
         let top = panel.frame.maxY
         let proposed = NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height)
         panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
+        emptyLabel.stringValue = scanning ? "Loading applications…" : "No applications found"
+        emptyLabel.isHidden = !matches.isEmpty
+        resultsScroll.isHidden = matches.isEmpty
+        resultsTable.reloadData()
+        if !matches.isEmpty {
+            resultsTable.selectRowIndexes(IndexSet(integer: selected), byExtendingSelection: false)
+            resultsTable.scrollRowToVisible(selected)
+        }
+    }
+
+    private func moveSelection(by offset: Int) {
+        guard !matches.isEmpty else { return }
+        selected = max(0, min(matches.count - 1, selected + offset))
+        resultsTable.selectRowIndexes(IndexSet(integer: selected), byExtendingSelection: false)
+        resultsTable.scrollRowToVisible(selected)
+    }
+
+    public func numberOfRows(in tableView: NSTableView) -> Int { matches.count }
+
+    public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard matches.indices.contains(row) else { return nil }
+        let identifier = NSUserInterfaceItemIdentifier("application-result")
+        let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? ApplicationResultCell
+            ?? ApplicationResultCell(frame: .zero)
+        cell.identifier = identifier
+        cell.configure(matches[row], icon: appIcon(for: matches[row]))
+        return cell
+    }
+
+    public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ResultRowView()
+    }
+
+    public func tableViewSelectionDidChange(_ notification: Notification) {
+        if resultsTable.selectedRow >= 0 { selected = resultsTable.selectedRow }
+    }
+
+    @objc private func clickResult(_ tableView: NSTableView) {
+        let row = tableView.clickedRow
+        guard matches.indices.contains(row) else { return }
+        openApplication(matches[row])
     }
 
     private func appIcon(for application: Application) -> NSImage {
@@ -250,7 +301,6 @@ final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDelegate 
         openApplication(projectApplications[sender.tag])
     }
 
-    @objc private func clickRow(_ sender: NSButton) { selected = sender.tag; launchSelection() }
     private func launchSelection() {
         guard matches.indices.contains(selected) else { return }
         openApplication(matches[selected])

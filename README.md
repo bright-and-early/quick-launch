@@ -2,7 +2,7 @@
 
 A small native macOS application launcher written in Swift and AppKit. No third-party dependencies, web runtime, Spotlight queries, document search, or network access.
 
-Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Drag the window by its background to reposition it. Click the menu bar magnifying glass to open the launcher or quit.
+Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Drag the search icon, empty search field, or window background to reposition it. When a query is present, the field keeps normal text selection. Scroll the results immediately after opening to browse every indexed app; arrow-key selection scrolls into view automatically. Click the menu bar magnifying glass to open the launcher or quit.
 
 The search row also shows one-click logos for AppLab, Atlas, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking opens that installed app through the same launch flow as a search result.
 
@@ -14,6 +14,7 @@ Requires macOS 13+ and the Xcode command line tools. On Steven's Mac, use the sh
 
 ```sh
 /Users/steven/.codex/bin/local-check-queue -- swift run CoreChecks
+/Users/steven/.codex/bin/local-check-queue -- swift run InteractionChecks
 /Users/steven/.codex/bin/local-check-queue -- ./scripts/install.sh
 open "$HOME/Applications/Quick Launch.app"
 ```

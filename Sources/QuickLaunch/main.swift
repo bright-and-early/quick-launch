@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import QuickLaunchCore
+import QuickLaunchUI
 
 if CommandLine.arguments.contains("--inventory") || CommandLine.arguments.contains("--benchmark") {
     let start = DispatchTime.now().uptimeNanoseconds
