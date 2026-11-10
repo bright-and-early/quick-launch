@@ -3,6 +3,34 @@ import Carbon
 import QuickLaunchCore
 import QuickLaunchUI
 
+if let index = CommandLine.arguments.firstIndex(of: "--spotlight-apply") {
+    guard geteuid() == 0, CommandLine.arguments.indices.contains(index + 1),
+          let data = Data(base64Encoded: CommandLine.arguments[index + 1]), data.count < 100_000,
+          let request = try? JSONDecoder().decode(SpotlightRequest.self, from: data), request.isValid else {
+        fputs("NO_CHANGES: Invalid, expired, or unprivileged Spotlight request.\n", stderr); exit(1)
+    }
+    let journal: SpotlightJournal
+    do { journal = try SpotlightJournal(id: request.id) }
+    catch { fputs("NO_CHANGES: Could not start the operation: \(error.localizedDescription)\n", stderr); exit(1) }
+    do {
+        let changes = SpotlightServices.apply(request, run: { arguments in
+            let remaining = request.deadline.timeIntervalSinceNow
+            guard remaining > 0 else { return CommandResult(-1, "", "Operation deadline reached; no further command issued.") }
+            return SystemCommand.run("/bin/launchctl", arguments, timeout: min(10, remaining))
+        }, beforeChange: { journal.append(phase: "before", service: $0) }, saveResult: { journal.append(phase: "result", change: $0) })
+        let completed = journal.append(phase: "complete")
+        FileHandle.standardOutput.write(try JSONEncoder().encode(changes))
+        if !completed { fputs("Journal could not be completed: \(journal.error)\n", stderr) }
+        exit(completed ? 0 : 1)
+    } catch { fputs("Results unavailable; inspect the operation journal: \(error.localizedDescription)\n", stderr); exit(1) }
+}
+if CommandLine.arguments.contains("--spotlight-status") {
+    let inventory = SpotlightServices.discover(uid: getuid(), run: SystemCommand.launchctl)
+    FileHandle.standardOutput.write(try JSONEncoder().encode(inventory.services))
+    for error in inventory.errors { fputs(error + "\n", stderr) }
+    exit(inventory.errors.isEmpty ? 0 : 1)
+}
+
 if CommandLine.arguments.contains("--inventory") || CommandLine.arguments.contains("--benchmark") {
     let start = DispatchTime.now().uptimeNanoseconds
     let applications = ApplicationIndex.scan()
@@ -77,19 +105,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
             guard let context = context else { return OSStatus(eventNotHandledErr) }
             let delegate = Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue()
-            delegate.launcher.toggle()
+            if delegate.launcher.isRecordingShortcut { delegate.launcher.acceptCurrentShortcut() }
+            else { delegate.launcher.toggle() }
             return noErr
         }, 1, &type, context, &handler)
-        let id = EventHotKeyID(signature: 0x514C4348, id: 1)
-        let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), id, GetApplicationEventTarget(), 0, &hotKey)
-        NSLog("Quick Launch: event handler=%d; Command-Space registration=%d", installStatus, status)
+        let configured = LauncherConfiguration.shared.hotKey
+        let status = registerHotKey(configured)
+        launcher.onHotKeyChange = { [weak self] value in
+            guard let self = self else { return "Launcher is unavailable." }
+            if value == LauncherConfiguration.shared.hotKey { return nil }
+            let status = self.registerHotKey(value)
+            if status == noErr { LauncherConfiguration.shared.setHotKey(value); return nil }
+            return "That shortcut is unavailable. Your previous shortcut is still active."
+        }
+        NSLog("Quick Launch: event handler=%d; shortcut registration=%d", installStatus, status)
         let backgroundLaunch = CommandLine.arguments.contains("--background")
         if status != noErr || installStatus != noErr {
+            launcher.reportShortcutError("\(configured.title) could not be activated. Choose another shortcut or use the menu bar icon.")
             if backgroundLaunch { return }
             DispatchQueue.main.async {
                 let alert = NSAlert()
-                alert.messageText = "Command–Space is already in use"
-                alert.informativeText = "Turn off the Spotlight Command–Space shortcut in System Settings → Keyboard → Keyboard Shortcuts → Spotlight, then quit and reopen Quick Launch. You can open the launcher from its menu bar icon. (Registration: \(status), handler: \(installStatus))"
+                alert.messageText = "The launcher shortcut is unavailable"
+                alert.informativeText = "Choose another shortcut in Quick Launch settings, or release the conflicting shortcut in System Settings. You can open the launcher from its menu bar icon. (Registration: \(status), handler: \(installStatus))"
                 alert.addButton(withTitle: "OK")
                 NSApp.activate(ignoringOtherApps: true)
                 alert.runModal()
@@ -97,6 +134,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if !backgroundLaunch {
             launcher.toggle()
         }
+    }
+
+    private func registerHotKey(_ value: LauncherHotKey) -> OSStatus {
+        guard value.isValid else { return OSStatus(paramErr) }
+        var modifiers: UInt32 = 0
+        for (bit, carbon): (UInt32, Int) in [(1, cmdKey), (2, optionKey), (4, controlKey), (8, shiftKey)] {
+            if value.modifiers & bit != 0 { modifiers |= UInt32(carbon) }
+        }
+        var replacement: EventHotKeyRef?
+        let id = EventHotKeyID(signature: 0x514C4348, id: 1)
+        let status = RegisterEventHotKey(value.keyCode, modifiers, id, GetApplicationEventTarget(), 0, &replacement)
+        if status == noErr {
+            if let previous = hotKey {
+                let removed = UnregisterEventHotKey(previous)
+                if removed != noErr {
+                    if let replacement = replacement { UnregisterEventHotKey(replacement) }
+                    return removed
+                }
+            }
+            hotKey = replacement
+        }
+        return status
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -114,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
-let application = NSApplication.shared
+let application = LauncherApplication.shared
 let delegate = AppDelegate()
 application.setActivationPolicy(.accessory)
 application.delegate = delegate

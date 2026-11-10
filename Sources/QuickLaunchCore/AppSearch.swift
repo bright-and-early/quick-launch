@@ -6,13 +6,15 @@ public enum AppSearch {
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    public static func results(for query: String, in apps: [Application], limit: Int = 8, openCounts: [String: Int] = [:]) -> [Application] {
+    public static func results(for query: String, in apps: [Application], limit: Int = 8, openCounts: [String: Int] = [:], shouldCancel: () -> Bool = { false }) -> [Application] {
         guard limit > 0 else { return [] }
         let query = normalize(query)
-        return apps.compactMap { app -> (Application, Int, Int)? in
-            guard let score = score(query, app) else { return nil }
+        let scored = apps.compactMap { app -> (Application, Int, Int)? in
+            guard !shouldCancel(), let score = score(query, app) else { return nil }
             return (app, score, openCounts[app.url.standardizedFileURL.path, default: 0])
-        }.sorted {
+        }
+        guard !shouldCancel() else { return [] }
+        return scored.sorted {
             if $0.1 != $1.1 { return $0.1 < $1.1 }
             if $0.2 != $1.2 { return $0.2 > $1.2 }
             if $0.0.searchName != $1.0.searchName { return $0.0.searchName < $1.0.searchName }

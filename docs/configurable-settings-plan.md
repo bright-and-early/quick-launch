@@ -1,0 +1,8 @@
+# Configurable launcher settings
+
+Authorized scope: global shortcut recording with conflict rollback; configurable indexed locations, Applications-only defaults and files/folders in added locations; explicit Spotlight service review/disable/enable workflow based on macos-service-manager exact-domain discovery and verification. No service changes, authorization prompts or foreground windows during agent tests.
+
+1. Add persisted hotkey/location models, item kinds and location-aware scanning. Test default isolation, file/folder discovery, exclusions and saved configuration.
+2. Add native shortcut recorder, directory list/add/remove controls in a scrolling reverse settings surface. Rebind the global hotkey transactionally, refreshing the index on folder edits and discarding outdated scans. Keep project pins app-only and open non-app results through their default app/Finder.
+3. Add an allowlisted Spotlight catalog, explicit-domain launchctl discovery/parser and disable/enable verification with injected command runner tests. A root CLI operation accepts only validated catalog targets. User-triggered workflow requests macOS authorization, shows individual results, and saves before/after reports; enable changes future launch policy without forcibly starting jobs. Preserve protected-job refusals and partial failures.
+4. Run focused core/native checks, inspect offscreen settings render, independent full-diff review, merge/push main and install/publish quietly. Verify source/signature/hash and running hidden process. Report actual privileged service operation/live recording tests as unexercised on Steven's real services.

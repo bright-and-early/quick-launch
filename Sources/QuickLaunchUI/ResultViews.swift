@@ -47,6 +47,7 @@ final class ApplicationResultCell: NSTableCellView {
 
     func configure(_ application: Application, icon: NSImage) {
         nameLabel.stringValue = application.name
+        toolTip = application.kind == .application ? nil : application.url.path
         appImage.image = icon
     }
 }

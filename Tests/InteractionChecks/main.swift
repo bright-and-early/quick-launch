@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 import QuickLaunchCore
-import QuickLaunchUI
+@_spi(Testing) import QuickLaunchUI
 
 func expect(_ value: @autoclosure () -> Bool, _ message: String) {
     guard value() else { fputs("FAIL: \(message)\n", stderr); exit(1) }
@@ -235,3 +235,67 @@ header.stringValue = "Terminal"
 launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
 content.layoutSubtreeIfNeeded()
 captureEvidence(content, name: "typed-search-hidden-native.png")
+
+let recorder = ShortcutRecorder(frame: NSRect(x: 0, y: 0, width: 180, height: 32))
+dismissPanel.contentView!.addSubview(recorder)
+recorder.performClick(nil)
+_ = dismissPanel.makeFirstResponder(recorder)
+dismissPanel.sendEvent(escape)
+expect(!recorder.isRecording && escapeDismissals == 2, "Escape cancels shortcut recording without dismissing settings")
+var recordedShortcut: LauncherHotKey?
+recorder.onChange = { value in recordedShortcut = value; return "Already in use" }
+recorder.performClick(nil)
+let commandK = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: dismissPanel.windowNumber, context: nil, characters: "k", charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40)!
+recorder.keyDown(with: commandK)
+expect(recorder.isRecording && recordedShortcut?.keyCode == 40, "shortcut conflict leaves recording active for another choice")
+recorder.onChange = { value in recordedShortcut = value; return nil }
+recorder.keyDown(with: commandK)
+expect(!recorder.isRecording && recorder.title == "⌘K", "accepted shortcut is displayed after recording")
+let configuredFolders = descendants(faces.reverse).compactMap { $0 as? NSPopUpButton }.first!
+expect(configuredFolders.numberOfItems == IndexLocation.standard.count, "settings lists the Applications-only default folders")
+expect(descendants(faces.reverse).contains { ($0 as? NSButton)?.title == "Spotlight services…" }, "settings exposes the deliberate Spotlight workflow without starting it")
+header.stringValue = ""
+launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
+settingsButton.performClick(nil)
+content.layoutSubtreeIfNeeded()
+captureEvidence(content, name: "configuration-hidden-native.png")
+reverseBack.performClick(nil)
+
+let manyFiles = (0..<3_000).map { Application(name: "Document \($0).txt", url: URL(fileURLWithPath: "/Fixture/Document \($0).txt"), kind: .file) }
+launcher.replaceSearchInventory(manyFiles)
+header.stringValue = "Document 1"
+launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
+header.stringValue = "Document 2999.txt"
+launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
+let searchDeadline = Date().addingTimeInterval(5)
+while Date() < searchDeadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+    let cell = table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTableCellView
+    if table.numberOfRows == 1 && cell?.textField?.stringValue == "Document 2999.txt" { break }
+}
+let fileResult = table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTableCellView
+expect(table.numberOfRows == 1 && fileResult?.textField?.stringValue == "Document 2999.txt", "large-folder searches publish only the latest query")
+expect(fileResult?.toolTip == "/Fixture/Document 2999.txt", "file results expose their containing path for disambiguation")
+
+let spotlightFixture = spotlightServiceEvidence([
+    SpotlightService(label: "com.apple.metadata.mds", domain: "system", loaded: true, disabled: false),
+    SpotlightService(label: "com.apple.mdworker.shared", domain: "gui/502", loaded: false, disabled: true),
+    SpotlightService(label: "com.apple.corespotlightd", domain: "gui/502", loaded: true, disabled: nil)
+])
+let reviewButtons = descendants(spotlightFixture.1).compactMap { $0 as? NSButton }
+expect(reviewButtons.contains { $0.title == "Disable selected…" } && reviewButtons.contains { $0.title == "Enable selected…" }, "Spotlight review has explicit disable and enable actions")
+withExtendedLifetime(spotlightFixture.0) { captureEvidence(spotlightFixture.1, name: "spotlight-review-fixture-hidden-native.png") }
+
+let recorderMenu = NSMenu()
+let menuSpy = ProjectActionSpy()
+let quitItem = NSMenuItem(title: "Quit", action: #selector(ProjectActionSpy.activate(_:)), keyEquivalent: "q")
+quitItem.keyEquivalentModifierMask = .command
+quitItem.target = menuSpy
+recorderMenu.addItem(quitItem)
+let commandQ = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: dismissPanel.windowNumber, context: nil, characters: "q", charactersIgnoringModifiers: "q", isARepeat: false, keyCode: 12)!
+recorder.performClick(nil)
+_ = dismissPanel.makeFirstResponder(recorder)
+if !dismissPanel.performKeyEquivalent(with: commandQ) { _ = recorderMenu.performKeyEquivalent(with: commandQ) }
+expect(menuSpy.activations == 0 && recorder.title == "⌘Q" && !recorder.isRecording, "recording intercepts Command-Q before a real menu key equivalent")
+_ = recorderMenu.performKeyEquivalent(with: commandQ)
+expect(menuSpy.activations == 1, "the menu fixture remains functional outside shortcut recording")
