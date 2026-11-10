@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Quick Launch", action: #selector(showLauncher), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh Applications", action: #selector(refresh), keyEquivalent: "")
+        menu.addItem(withTitle: "Enable Window Animations…", action: #selector(enableAnimations), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Quick Launch", action: #selector(quit), keyEquivalent: "q")
         for entry in menu.items { entry.target = self }
@@ -82,7 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let id = EventHotKeyID(signature: 0x514C4348, id: 1)
         let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), id, GetApplicationEventTarget(), 0, &hotKey)
         NSLog("Quick Launch: event handler=%d; Command-Space registration=%d", installStatus, status)
+        let backgroundLaunch = CommandLine.arguments.contains("--background")
         if status != noErr || installStatus != noErr {
+            if backgroundLaunch { return }
             DispatchQueue.main.async {
                 let alert = NSAlert()
                 alert.messageText = "Command–Space is already in use"
@@ -91,20 +94,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.activate(ignoringOtherApps: true)
                 alert.runModal()
             }
-        } else {
+        } else if !backgroundLaunch {
             launcher.toggle()
         }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { launcher.toggle() }
+        if !launcher.panel.isVisible { launcher.toggle() }
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
+        launcher?.dismiss()
         if let hotKey = hotKey { UnregisterEventHotKey(hotKey) }
         if let handler = handler { RemoveEventHandler(handler) }
     }
     @objc private func showLauncher() { if !launcher.panel.isVisible { launcher.toggle() } }
+    @objc private func enableAnimations() { launcher.requestWindowAnimationPermission() }
     @objc private func refresh() { launcher.refreshIndex(force: true) }
     @objc private func quit() { NSApp.terminate(nil) }
 }

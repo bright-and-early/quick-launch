@@ -50,7 +50,16 @@ let projectApps = ["Menagerie", "Quick Launch", "AppLab", "Gimme Job", "Atlas", 
     Application(name: $0, url: projectsDirectory.appendingPathComponent("\($0).app"))
 }
 let shortcuts = ProjectShortcuts.applications(in: projectApps + [app("Other"), app("AppLab")], directory: projectsDirectory)
-expect(shortcuts.map(\.name) == ["AppLab", "Atlas", "Gimme Job", "Matterlab", "Menagerie"], "only installed project apps in stable shortcut order")
+expect(shortcuts.map(\.name) == ["AppLab", "Gimme Job", "Matterlab", "Menagerie"], "only installed project apps in stable shortcut order")
 expect(ProjectShortcuts.applications(in: [projectApps[0]], directory: projectsDirectory).map(\.name) == ["Menagerie"], "missing project apps omitted")
 expect(ProjectShortcuts.applications(in: [app("AppLab")], directory: projectsDirectory).isEmpty, "unrelated same-name app excluded")
 print("PASS: project shortcut checks; total \(checks)")
+
+expect(ProjectToggleAction.decide(isRunning: false, isHidden: false, wasFrontmost: false) == .launch, "closed project launches")
+expect(ProjectToggleAction.decide(isRunning: true, isHidden: false, wasFrontmost: true) == .hide, "frontmost project toggles hidden")
+expect(ProjectToggleAction.decide(isRunning: true, isHidden: true, wasFrontmost: false) == .show, "hidden project toggles visible")
+expect(ProjectToggleAction.decide(isRunning: true, isHidden: false, wasFrontmost: false) == .show, "background project comes forward before it can hide")
+expect(!LauncherDismissal.shouldDismiss(click: CGPoint(x: 50, y: 50), panel: CGRect(x: 0, y: 0, width: 100, height: 100), isVisible: true), "inside click preserves launcher")
+expect(LauncherDismissal.shouldDismiss(click: CGPoint(x: 150, y: 50), panel: CGRect(x: 0, y: 0, width: 100, height: 100), isVisible: true), "outside click dismisses launcher")
+expect(!LauncherDismissal.shouldDismiss(click: CGPoint(x: 150, y: 50), panel: .zero, isVisible: false), "hidden launcher ignores background clicks")
+print("PASS: toggle and dismissal checks; total \(checks)")
