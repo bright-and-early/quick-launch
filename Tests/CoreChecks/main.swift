@@ -88,3 +88,58 @@ let saturatedHistory = ApplicationOpenHistory(defaults: usageDefaults)
 saturatedHistory.recordOpen(app("Zebra"))
 expect(saturatedHistory.counts[app("Zebra").url.path] == Int.max, "counter saturation never overflows")
 print("PASS: persistent usage ordering; total \(checks)")
+
+let configurationSuite = "QuickLaunchConfigurationChecks.\(UUID().uuidString)"
+let configurationDefaults = UserDefaults(suiteName: configurationSuite)!
+defer { configurationDefaults.removePersistentDomain(forName: configurationSuite) }
+let configuration = LauncherConfiguration(defaults: configurationDefaults)
+expect(configuration.hotKey == .standard && configuration.locations == IndexLocation.standard && configuration.locations.allSatisfy { !$0.includesFiles }, "defaults keep Command-Space and Applications-only scanning")
+let customKey = LauncherHotKey(keyCode: 40, modifiers: 5, key: "K")
+configuration.setHotKey(customKey)
+expect(LauncherConfiguration(defaults: configurationDefaults).hotKey == customKey, "configured hotkey persists")
+expect(!LauncherHotKey(keyCode: 40, modifiers: 8, key: "K").isValid && !LauncherHotKey(keyCode: 999, modifiers: 1, key: "K").isValid, "plain typing and invalid keycodes cannot become global shortcuts")
+configuration.setLocations([IndexLocation(path: root.path, includesFiles: true), IndexLocation(path: root.path, includesFiles: true)])
+expect(configuration.locations.count == 1 && LauncherConfiguration(defaults: configurationDefaults).locations == configuration.locations, "index folders deduplicate and persist")
+try Data("example".utf8).write(to: root.appendingPathComponent("example.txt"))
+let contents = ApplicationIndex.scan(locations: configuration.locations)
+expect(contents.contains { $0.name == "example.txt" && $0.kind == .file } && contents.contains { $0.name == "Utilities" && $0.kind == .folder }, "opted-in directories include files and folders")
+expect(!ApplicationIndex.scan().contains { $0.kind != .application }, "default scan remains app-only")
+expect(!contents.contains { $0.url.path.contains("Contents/Helpers") || $0.url.path.contains(".Private") || $0.url.path.contains("Escape/") }, "extra folders retain app-package, hidden and symlink traversal boundaries")
+configuration.setLocations([])
+expect(LauncherConfiguration(defaults: configurationDefaults).locations.isEmpty, "intentionally empty index survives restart")
+
+let service = SpotlightService(label: "com.apple.mdworker.shared", domain: "gui/502", loaded: true, disabled: false)
+expect(SpotlightServices.includes(service.label) && !SpotlightServices.includes("com.apple.fseventsd") && !SpotlightServices.includes("com.apple.backupd"), "Spotlight catalog excludes general filesystem and backup services")
+expect(!SpotlightServices.isValidTarget(SpotlightService(label: service.label + ";touch /tmp/no", domain: service.domain, loaded: false, disabled: nil)), "command targets reject injected service labels")
+expect(!SpotlightServices.isValidTarget(SpotlightService(label: service.label, domain: "gui/502/other", loaded: false, disabled: nil)), "command targets reject invalid launch domains")
+expect(SpotlightServices.overrides("\"com.apple.mdworker.shared\" => true\n\"com.apple.mds\" => false")[service.label] == true, "Boolean launch policies parse correctly")
+let inventoryFixture = "services = {\n  111 0 com.apple.mdworker.shared\n  - 0 com.apple.mds\n}\nendpoints = {\n  222 0 com.apple.not-a-job\n}"
+expect(SpotlightServices.loadedLabels(inventoryFixture) == Set([service.label, "com.apple.mds"]), "inventory parses only the loaded-service table")
+var commands: [[String]] = []
+var policyReads = 0
+var jobReads = 0
+let disabledChanges = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: true)) { args in
+    commands.append(args)
+    if args[0] == "print-disabled" { policyReads += 1; return CommandResult(0, "\"\(service.label)\" => \(policyReads == 1 ? "false" : "true")") }
+    if args[0] == "print" { jobReads += 1; return jobReads == 1 ? CommandResult(0) : CommandResult(113, "", "Could not find service \"\(service.label)\"") }
+    return CommandResult(0)
+}
+expect(disabledChanges.first?.succeeded == true && commands[2] == ["disable", service.target] && commands[3] == ["bootout", service.target], "disable policy precedes exact-domain stop and both are verified")
+let stillLoaded = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: true)) { args in
+    args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => true") : CommandResult(0)
+}
+expect(stillLoaded.first?.succeeded == false, "saved override alone cannot report successful disable")
+let denied = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: true)) { _ in CommandResult(1, "", "Operation not permitted") }
+expect(denied.first?.succeeded == false && denied.first?.detail.contains("Operation not permitted") == true, "protected-service refusal is reported")
+commands = []
+let enabledChanges = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: false)) { args in
+    commands.append(args)
+    return args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => false") : CommandResult(0)
+}
+expect(enabledChanges.first?.succeeded == true && !commands.contains { $0[0] == "bootout" || $0[0] == "bootstrap" }, "enable verifies policy without stopping or starting jobs")
+print("PASS: configurable settings and Spotlight command fixtures; total \(checks)")
+
+expect(AppSearch.results(for: "", in: apps, shouldCancel: { true }).isEmpty, "superseded searches cancel before publishing results")
+expect(ApplicationIndex.scan(roots: [root], includeFiles: true, shouldCancel: { true }).isEmpty, "superseded directory scans stop without walking contents")
+
+print("PASS: all core checks; total \(checks)")

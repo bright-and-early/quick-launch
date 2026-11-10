@@ -6,6 +6,9 @@ public final class SearchPanel: NSPanel {
     public override var canBecomeMain: Bool { false }
     public var onDismiss: (() -> Void)?
     public override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == 53, let recorder = firstResponder as? ShortcutRecorder, recorder.isRecording {
+            recorder.keyDown(with: event); return
+        }
         if event.type == .keyDown && event.keyCode == 53 { cancelOperation(nil); return }
         super.sendEvent(event)
     }
@@ -28,6 +31,14 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private let backButton = ProjectShortcutButton()
     private var colorButtons: [ProjectShortcutButton] = []
     private var faces: LauncherFaces!
+    private let shortcutRecorder = ShortcutRecorder()
+    private let configurationMessage = NSTextField(wrappingLabelWithString: "")
+    private let directories = NSPopUpButton()
+    private let removeFolderControl = SettingsActionButton()
+    private var spotlightWindow: SpotlightSettingsWindow?
+    public var onHotKeyChange: ((LauncherHotKey) -> String?)?
+    public var isRecordingShortcut: Bool { shortcutRecorder.isRecording }
+    public func reportShortcutError(_ message: String) { configurationMessage.stringValue = message }
     private var projectApplications: [Application] = []
     private var fieldTrailingToProjects: NSLayoutConstraint!
     private var fieldTrailingToEdge: NSLayoutConstraint!
@@ -35,12 +46,27 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private let emptyLabel = NSTextField(labelWithString: "")
     private var applications: [Application] = []
     private var matches: [Application] = []
+    private var searchGeneration = 0
+    private var searchPending = false
+    private var launchAfterSearch = false
+    private var tabAfterSearch = false
+    private let searchQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
     private var selected = 0
     private var icons: [URL: NSImage] = [:]
     private var scanning = false
+    private var scanGeneration = 0
+    private var pendingScan = false
+    private var indexCancellation = IndexScanCancellation()
     private var lastScan = Date.distantPast
     private var outsideClickMonitor: Any?
     private var localClickMonitor: Any?
+    private var menuTracking = false
+    private var menuObservers: [NSObjectProtocol] = []
     private var previousFrontmost: NSRunningApplication?
     private var presentationID = UUID()
     private let projectTransitions = ProjectAppTransitions()
@@ -219,12 +245,21 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         let colorLabel = NSTextField(labelWithString: "Highlight color")
         colorLabel.font = .systemFont(ofSize: 14, weight: .medium)
         colorLabel.translatesAutoresizingMaskIntoConstraints = false
-        reverse.addSubview(colorLabel)
+        let settingsScroll = NSScrollView()
+        settingsScroll.translatesAutoresizingMaskIntoConstraints = false
+        settingsScroll.drawsBackground = false
+        settingsScroll.hasVerticalScroller = true
+        settingsScroll.autohidesScrollers = true
+        reverse.addSubview(settingsScroll)
+        let body = SettingsBody()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        settingsScroll.documentView = body
+        body.addSubview(colorLabel)
         let swatches = NSStackView()
         swatches.orientation = .horizontal
         swatches.spacing = 8
         swatches.translatesAutoresizingMaskIntoConstraints = false
-        reverse.addSubview(swatches)
+        body.addSubview(swatches)
         for (index, color) in HighlightColor.allCases.enumerated() {
             let button = ProjectShortcutButton()
             button.tag = -10 - index
@@ -246,7 +281,48 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
             button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         }
         updateColorButtons()
+        let hotkeyLabel = NSTextField(labelWithString: "Hotkey")
+        shortcutRecorder.display(LauncherConfiguration.shared.hotKey)
+        shortcutRecorder.onChange = { [weak self] value in
+            guard let change = self?.onHotKeyChange else { return "Shortcut registration is unavailable." }
+            return change(value)
+        }
+        shortcutRecorder.onMessage = { [weak self] text in self?.configurationMessage.stringValue = text }
+        configurationMessage.font = .systemFont(ofSize: 11)
+        configurationMessage.textColor = .secondaryLabelColor
+        let folderLabel = NSTextField(labelWithString: "Indexed folders")
+        let addFolder = SettingsActionButton(title: "Add folder…", target: self, action: #selector(addIndexFolder(_:)))
+        let removeFolder = removeFolderControl
+        removeFolder.title = "Remove"; removeFolder.target = self; removeFolder.action = #selector(removeIndexFolder(_:))
+        let restoreFolders = SettingsActionButton(title: "Apps only", target: self, action: #selector(resetIndexFolders(_:)))
+        let services = SettingsActionButton(title: "Spotlight services…", target: self, action: #selector(openSpotlightServices(_:)))
+        for view in [hotkeyLabel, shortcutRecorder, configurationMessage, folderLabel, directories, addFolder, removeFolder, restoreFolders, services] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            body.addSubview(view)
+        }
+        updateDirectoryChoices()
+        let keyViews: [NSView] = [backButton] + colorButtons + [shortcutRecorder, directories, addFolder, removeFolder, restoreFolders, services]
+        for (index, view) in keyViews.enumerated() { view.nextKeyView = keyViews[(index + 1) % keyViews.count] }
+        backButton.navigate = { [weak self, weak services] offset, _ in
+            guard let self = self else { return }
+            self.panel.makeFirstResponder(offset > 0 ? self.colorButtons.first : services)
+        }
+        for (index, button) in colorButtons.enumerated() {
+            button.navigate = { [weak self] offset, _ in
+                guard let self = self else { return }
+                let next = index + offset
+                let view: NSView = next < 0 ? self.backButton : next >= self.colorButtons.count ? self.shortcutRecorder : self.colorButtons[next]
+                self.panel.makeFirstResponder(view)
+                view.scrollToVisible(view.bounds)
+            }
+        }
         NSLayoutConstraint.activate([
+            settingsScroll.leadingAnchor.constraint(equalTo: reverse.leadingAnchor),
+            settingsScroll.trailingAnchor.constraint(equalTo: reverse.trailingAnchor),
+            settingsScroll.topAnchor.constraint(equalTo: reverse.topAnchor, constant: 72),
+            settingsScroll.bottomAnchor.constraint(equalTo: reverse.bottomAnchor, constant: -8),
+            body.widthAnchor.constraint(equalTo: settingsScroll.contentView.widthAnchor),
+            body.heightAnchor.constraint(equalToConstant: 300),
             settingsButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
             settingsButton.topAnchor.constraint(equalTo: content.topAnchor, constant: 23),
             settingsButton.widthAnchor.constraint(equalToConstant: 32), settingsButton.heightAnchor.constraint(equalToConstant: 32),
@@ -258,16 +334,89 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
             backButton.widthAnchor.constraint(equalToConstant: 32), backButton.heightAnchor.constraint(equalToConstant: 32),
             title.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 14),
             title.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            colorLabel.leadingAnchor.constraint(equalTo: reverse.leadingAnchor, constant: 26),
-            colorLabel.topAnchor.constraint(equalTo: reverse.topAnchor, constant: 84),
+            colorLabel.leadingAnchor.constraint(equalTo: body.leadingAnchor, constant: 26),
+            colorLabel.topAnchor.constraint(equalTo: body.topAnchor, constant: 12),
             swatches.leadingAnchor.constraint(equalTo: colorLabel.trailingAnchor, constant: 18),
-            swatches.centerYAnchor.constraint(equalTo: colorLabel.centerYAnchor)
+            swatches.centerYAnchor.constraint(equalTo: colorLabel.centerYAnchor),
+            hotkeyLabel.leadingAnchor.constraint(equalTo: colorLabel.leadingAnchor),
+            hotkeyLabel.topAnchor.constraint(equalTo: body.topAnchor, constant: 62),
+            shortcutRecorder.leadingAnchor.constraint(equalTo: body.leadingAnchor, constant: 160),
+            shortcutRecorder.centerYAnchor.constraint(equalTo: hotkeyLabel.centerYAnchor),
+            shortcutRecorder.widthAnchor.constraint(greaterThanOrEqualToConstant: 155),
+            configurationMessage.leadingAnchor.constraint(equalTo: shortcutRecorder.leadingAnchor),
+            configurationMessage.topAnchor.constraint(equalTo: shortcutRecorder.bottomAnchor, constant: 5),
+            configurationMessage.trailingAnchor.constraint(equalTo: body.trailingAnchor, constant: -26),
+            folderLabel.leadingAnchor.constraint(equalTo: colorLabel.leadingAnchor),
+            folderLabel.topAnchor.constraint(equalTo: body.topAnchor, constant: 128),
+            directories.leadingAnchor.constraint(equalTo: shortcutRecorder.leadingAnchor),
+            directories.centerYAnchor.constraint(equalTo: folderLabel.centerYAnchor),
+            directories.trailingAnchor.constraint(equalTo: body.trailingAnchor, constant: -26),
+            addFolder.leadingAnchor.constraint(equalTo: directories.leadingAnchor),
+            addFolder.topAnchor.constraint(equalTo: directories.bottomAnchor, constant: 8),
+            removeFolder.leadingAnchor.constraint(equalTo: addFolder.trailingAnchor, constant: 8),
+            removeFolder.centerYAnchor.constraint(equalTo: addFolder.centerYAnchor),
+            restoreFolders.leadingAnchor.constraint(equalTo: removeFolder.trailingAnchor, constant: 8),
+            restoreFolders.centerYAnchor.constraint(equalTo: addFolder.centerYAnchor),
+            services.leadingAnchor.constraint(equalTo: colorLabel.leadingAnchor),
+            services.topAnchor.constraint(equalTo: body.topAnchor, constant: 232)
         ])
     }
 
     @objc private func showSettings(_ sender: Any?) {
         guard !faces.isFlipping && !projectTransitions.isBusy else { return }
+        launchAfterSearch = false
+        tabAfterSearch = false
         faces.setShowingBack(true, animated: panel.isVisible)
+    }
+
+    @_spi(Testing) public func replaceSearchInventory(_ inventory: [Application]) {
+        applications = inventory
+        updateResults()
+    }
+
+    private func updateDirectoryChoices() {
+        directories.removeAllItems()
+        for location in LauncherConfiguration.shared.locations {
+            directories.addItem(withTitle: location.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") + (location.includesFiles ? "" : " (apps only)"))
+        }
+        if directories.numberOfItems == 0 { directories.addItem(withTitle: "No folders indexed") }
+        removeFolderControl.isEnabled = !LauncherConfiguration.shared.locations.isEmpty
+        directories.setAccessibilityLabel("Indexed folders")
+    }
+
+    @objc private func addIndexFolder(_ sender: Any?) {
+        let picker = NSOpenPanel()
+        picker.canChooseFiles = false; picker.canChooseDirectories = true; picker.allowsMultipleSelection = true
+        picker.prompt = "Index folders"
+        picker.beginSheetModal(for: panel) { [weak self] response in
+            guard let self = self, response == .OK else { return }
+            LauncherConfiguration.shared.setLocations(LauncherConfiguration.shared.locations + picker.urls.map { IndexLocation(path: $0.path, includesFiles: true) })
+            self.updateDirectoryChoices(); self.refreshIndex(force: true)
+            if let last = picker.urls.last, let index = LauncherConfiguration.shared.locations.firstIndex(where: { $0.path == last.standardizedFileURL.path }) {
+                self.directories.selectItem(at: index)
+            }
+        }
+    }
+
+    @objc private func removeIndexFolder(_ sender: Any?) {
+        var locations = LauncherConfiguration.shared.locations
+        guard locations.indices.contains(directories.indexOfSelectedItem) else { return }
+        locations.remove(at: directories.indexOfSelectedItem)
+        LauncherConfiguration.shared.setLocations(locations)
+        updateDirectoryChoices(); refreshIndex(force: true)
+    }
+
+    @objc private func resetIndexFolders(_ sender: Any?) {
+        LauncherConfiguration.shared.setLocations(IndexLocation.standard)
+        updateDirectoryChoices(); refreshIndex(force: true)
+    }
+
+    @objc private func openSpotlightServices(_ sender: Any?) {
+        guard spotlightWindow == nil else { return }
+        let workflow = SpotlightSettingsWindow(parent: panel)
+        spotlightWindow = workflow
+        workflow.onClose = { [weak self] in self?.spotlightWindow = nil }
+        workflow.present()
     }
 
     @objc private func showSearch(_ sender: Any?) {
@@ -296,9 +445,14 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     deinit {
         if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
         if let monitor = localClickMonitor { NSEvent.removeMonitor(monitor) }
+        menuObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        searchQueue.cancelAllOperations()
+        indexCancellation.cancel()
     }
 
     private func installDismissalMonitors() {
+        menuObservers.append(NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = true })
+        menuObservers.append(NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = false })
         let mouseEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] _ in
             self?.dismissIfOutside(NSEvent.mouseLocation)
@@ -311,16 +465,34 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func dismissIfOutside(_ point: NSPoint) {
+        guard panel.attachedSheet == nil && !menuTracking else { return }
         if LauncherDismissal.shouldDismiss(click: point, panel: panel.frame, isVisible: panel.isVisible) { dismiss() }
     }
 
     public func refreshIndex(force: Bool = false) {
+        if scanning {
+            if force { scanGeneration += 1; pendingScan = true; indexCancellation.cancel() }
+            return
+        }
         guard !scanning, force || Date().timeIntervalSince(lastScan) > 30 else { return }
         scanning = true
+        let generation = scanGeneration
+        let cancellation = IndexScanCancellation()
+        indexCancellation = cancellation
+        let locations = LauncherConfiguration.shared.locations
+        let includesFiles = locations.contains { $0.includesFiles }
+        field.placeholderString = includesFiles ? "Search" : "Search applications"
+        field.setAccessibilityLabel(includesFiles ? "Search" : "Search applications")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let inventory = ApplicationIndex.scan()
+            let inventory = ApplicationIndex.scan(locations: locations, shouldCancel: { cancellation.isCancelled })
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                self.scanning = false
+                if self.pendingScan || generation != self.scanGeneration {
+                    self.pendingScan = false
+                    self.refreshIndex(force: true)
+                    return
+                }
                 self.applications = inventory
                 self.updateProjectShortcuts()
                 self.scanning = false
@@ -331,6 +503,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     public func toggle() {
+        if let sheet = panel.attachedSheet { sheet.makeKeyAndOrderFront(nil); return }
         if panel.isVisible { dismiss(); return }
         presentationID = UUID()
         faces.setShowingBack(false, animated: false)
@@ -356,14 +529,17 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     public func dismiss() {
+        shortcutRecorder.cancelRecording()
         presentationID = UUID()
         projectTransitions.cancel()
         panel.orderOut(nil)
+        launchAfterSearch = false
+        tabAfterSearch = false
         faces.setShowingBack(false, animated: false)
     }
     public func requestWindowAnimationPermission() { projectTransitions.requestPermission() }
     public func windowDidResignKey(_ notification: Notification) {
-        if !projectTransitions.isBusy { dismiss() }
+        if !projectTransitions.isBusy && panel.attachedSheet == nil && !menuTracking { dismiss() }
     }
     public func controlTextDidChange(_ obj: Notification) {
         selected = 0
@@ -388,6 +564,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         case #selector(NSResponder.insertTab(_:)):
             let range = textView.selectedRange()
             let atEnd = range.length == 0 && range.location == (textView.string as NSString).length
+            if searchPending { tabAfterSearch = atEnd; return true }
             let canComplete = matches.indices.contains(selected) && AppSearch.normalize(field.stringValue) != AppSearch.normalize(matches[selected].name)
             if atEnd && !canComplete && !faces.showingBack {
                 return panel.makeFirstResponder(projectButtons.arrangedSubviews.first ?? settingsButton)
@@ -403,8 +580,42 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func updateResults() {
-        matches = AppSearch.results(for: field.stringValue, in: applications, limit: applications.count, openCounts: openHistory.counts)
+        searchGeneration += 1
+        searchQueue.cancelAllOperations()
+        launchAfterSearch = false
+        tabAfterSearch = false
+        let generation = searchGeneration
+        let query = field.stringValue, inventory = applications, counts = openHistory.counts
         emptySearchDrag.isHidden = !field.stringValue.isEmpty
+        if inventory.count > 2_000 {
+            searchPending = true
+            let operation = BlockOperation()
+            operation.addExecutionBlock { [weak self, weak operation] in
+                guard let operation = operation, !operation.isCancelled else { return }
+                let results = AppSearch.results(for: query, in: inventory, limit: inventory.count, openCounts: counts, shouldCancel: { operation.isCancelled })
+                DispatchQueue.main.async {
+                    guard let self = self, !operation.isCancelled, generation == self.searchGeneration else { return }
+                    self.searchPending = false
+                    self.applyResults(results)
+                    if self.launchAfterSearch && self.panel.isVisible { self.launchAfterSearch = false; self.launchSelection() }
+                    else if self.tabAfterSearch, self.panel.isVisible, !self.faces.showingBack, let editor = self.field.currentEditor() as? NSTextView {
+                        self.tabAfterSearch = false
+                        let range = editor.selectedRange()
+                        if range.length == 0 && range.location == (editor.string as NSString).length {
+                            _ = self.control(self.field, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
+                        }
+                    }
+                }
+            }
+            searchQueue.addOperation(operation)
+            return
+        }
+        searchPending = false
+        applyResults(AppSearch.results(for: query, in: inventory, limit: inventory.count, openCounts: counts))
+    }
+
+    private func applyResults(_ results: [Application]) {
+        matches = results
         selected = max(0, min(selected, matches.count - 1))
         drawRows()
     }
@@ -417,7 +628,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         if !faces.showingBack && !faces.isFlipping {
             panel.setFrame(PanelPlacement.fitted(proposed, in: targetScreen.visibleFrame), display: true)
         }
-        emptyLabel.stringValue = scanning ? "Loading applications…" : "No applications found"
+        emptyLabel.stringValue = scanning ? "Indexing…" : (LauncherConfiguration.shared.locations.contains { $0.includesFiles } ? "No results found" : "No applications found")
         emptyLabel.isHidden = !matches.isEmpty
         resultsScroll.isHidden = matches.isEmpty
         resultsTable.reloadData()
@@ -455,6 +666,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     @objc private func clickResult(_ tableView: NSTableView) {
+        guard !searchPending else { return }
         let row = tableView.clickedRow
         guard matches.indices.contains(row) else { return }
         openApplication(matches[row])
@@ -533,6 +745,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func launchSelection() {
+        if searchPending { launchAfterSearch = true; return }
         guard matches.indices.contains(selected) else { return }
         openApplication(matches[selected])
     }
@@ -540,6 +753,10 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private func openApplication(_ app: Application) {
         dismiss()
         onLaunch?(app)
+        if app.kind != .application {
+            if NSWorkspace.shared.open(app.url) { openHistory.recordOpen(app) }
+            return
+        }
         NSWorkspace.shared.openApplication(at: app.url, configuration: .init()) { [weak self] running, error in
             if error == nil, running != nil {
                 DispatchQueue.main.async { self?.openHistory.recordOpen(app) }
