@@ -5,6 +5,8 @@ let package = Package(
     products: [.executable(name: "QuickLaunch", targets: ["QuickLaunch"])],
     targets: [
         .target(name: "QuickLaunchCore"),
-        .executableTarget(name: "QuickLaunch", dependencies: ["QuickLaunchCore"]),
+        .target(name: "QuickLaunchUI", dependencies: ["QuickLaunchCore"]),
+        .executableTarget(name: "QuickLaunch", dependencies: ["QuickLaunchCore", "QuickLaunchUI"]),
+        .executableTarget(name: "InteractionChecks", dependencies: ["QuickLaunchCore", "QuickLaunchUI"], path: "Tests/InteractionChecks"),
         .executableTarget(name: "CoreChecks", dependencies: ["QuickLaunchCore"], path: "Tests/CoreChecks")
     ])
