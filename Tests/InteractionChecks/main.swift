@@ -183,8 +183,17 @@ reverseBack.performClick(nil)
 expect(!faces.showingBack && faces.reverse.isHidden && header.stringValue == "zzzzzzzzzz", "flipping back retains the current search query")
 
 faces.setShowingBack(true, animated: true, reduceMotion: false)
-let rotation = faces.front.layer?.animation(forKey: "launcher-face") as? CABasicAnimation
-expect(rotation?.keyPath == "transform.rotation.y" && rotation?.duration == 0.28 && (rotation?.toValue as? Double) == Double.pi, "normal motion uses a 180-degree layer rotation")
+let rotation = faces.front.layer?.animation(forKey: "launcher-face") as? CAKeyframeAnimation
+let finalRotation = (rotation?.values?.last as? NSValue)?.caTransform3DValue
+expect(rotation?.keyPath == "transform" && rotation?.duration == 0.28 && abs((finalRotation?.m11 ?? 0) + 1) < 0.0001, "normal motion uses a 180-degree layer rotation")
+let panelCenter = CGPoint(x: faces.bounds.midX, y: faces.bounds.midY)
+expect((rotation?.values as? [NSValue])?.allSatisfy { value in
+    let transform = value.caTransform3DValue
+    let x = panelCenter.x * transform.m11 + panelCenter.y * transform.m21 + transform.m41
+    let y = panelCenter.x * transform.m12 + panelCenter.y * transform.m22 + transform.m42
+    let z = panelCenter.x * transform.m13 + panelCenter.y * transform.m23 + transform.m43
+    return abs(x - panelCenter.x) < 0.0001 && abs(y - panelCenter.y) < 0.0001 && abs(z) < 0.0001
+} == true, "every intermediate flip transform keeps the panel center fixed")
 faces.setShowingBack(false, animated: false)
 let settleDeadline = Date().addingTimeInterval(0.4)
 while Date() < settleDeadline { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }

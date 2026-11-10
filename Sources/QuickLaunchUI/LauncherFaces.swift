@@ -41,6 +41,16 @@ public final class LauncherFaces: NSView {
         if !isFlipping { super.keyDown(with: event) }
     }
 
+    /// AppKit owns backing-layer anchors at (0, 0); compensate within the transform.
+    public static func centeredRotation(_ angle: Double, size: NSSize) -> CATransform3D {
+        var transform = CATransform3DMakeRotation(angle, 0, 1, 0)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        transform.m41 = center.x - center.x * transform.m11 - center.y * transform.m21
+        transform.m42 = center.y - center.x * transform.m12 - center.y * transform.m22
+        transform.m43 = -center.x * transform.m13 - center.y * transform.m23
+        return transform
+    }
+
     public func setShowingBack(_ back: Bool, animated: Bool, reduceMotion: Bool? = nil) {
         generation += 1
         let token = generation
@@ -55,8 +65,8 @@ public final class LauncherFaces: NSView {
         reverse.layer?.removeAllAnimations()
         front.isHidden = false
         reverse.isHidden = false
-        front.layer?.transform = reduce ? CATransform3DIdentity : CATransform3DMakeRotation(frontAngle, 0, 1, 0)
-        reverse.layer?.transform = reduce ? CATransform3DIdentity : CATransform3DMakeRotation(reverseAngle, 0, 1, 0)
+        front.layer?.transform = reduce ? CATransform3DIdentity : Self.centeredRotation(frontAngle, size: bounds.size)
+        reverse.layer?.transform = reduce ? CATransform3DIdentity : Self.centeredRotation(reverseAngle, size: bounds.size)
         front.layer?.opacity = reduce && back ? 0 : 1
         reverse.layer?.opacity = reduce && !back ? 0 : 1
         CATransaction.commit()
@@ -67,9 +77,19 @@ public final class LauncherFaces: NSView {
             DispatchQueue.main.async { self?.settle(back, token: token) }
         }
         for (face, end, start) in [(front, frontAngle, back ? 0 : Double.pi), (reverse, reverseAngle, back ? -Double.pi : 0)] {
-            let animation = CABasicAnimation(keyPath: reduce ? "opacity" : "transform.rotation.y")
-            animation.fromValue = reduce ? (face === front ? (back ? 1.0 : 0.0) : (back ? 0.0 : 1.0)) : start
-            animation.toValue = reduce ? (face === front ? (back ? 0.0 : 1.0) : (back ? 1.0 : 0.0)) : end
+            let animation: CAPropertyAnimation
+            if reduce {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = face === front ? (back ? 1.0 : 0.0) : (back ? 0.0 : 1.0)
+                fade.toValue = face === front ? (back ? 0.0 : 1.0) : (back ? 1.0 : 0.0)
+                animation = fade
+            } else {
+                let turn = CAKeyframeAnimation(keyPath: "transform")
+                turn.values = (0...60).map { step in
+                    NSValue(caTransform3D: Self.centeredRotation(start + (end - start) * Double(step) / 60, size: bounds.size))
+                }
+                animation = turn
+            }
             animation.duration = reduce ? 0.08 : 0.28
             animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
             face.layer?.add(animation, forKey: "launcher-face")
