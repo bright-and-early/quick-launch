@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#f5fbff" stop-opacity=".94"/>
+      <stop offset=".36" stop-color="#cbe2f6" stop-opacity=".83"/>
+      <stop offset=".72" stop-color="#a9ceee" stop-opacity=".78"/>
+      <stop offset="1" stop-color="#e3f6ff" stop-opacity=".91"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff"/><stop offset=".47" stop-color="#deefff"/>
+      <stop offset=".74" stop-color="#77c9ec"/><stop offset="1" stop-color="#c4f5ff"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2=".7" y2="1">
+      <stop stop-color="#164574"/><stop offset=".5" stop-color="#11325e"/><stop offset="1" stop-color="#0a1d43"/>
+    </linearGradient>
+    <linearGradient id="reflection" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff" stop-opacity=".48"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- One shared projection: every horizontal edge rises 0.11 units per unit right. -->
+  <g transform="translate(108 157) matrix(1 -.11 0 1 0 0)">
+    <rect x="5" y="7" width="800" height="800" rx="102" fill="#71b9dc" fill-opacity=".5" stroke="#b4e8fb" stroke-width="2"/>
+    <rect x="0" y="0" width="800" height="800" rx="102" fill="url(#glass)" stroke="url(#rim)" stroke-width="5"/>
+    <rect x="8" y="8" width="784" height="784" rx="95" fill="none" stroke="#fff" stroke-opacity=".69" stroke-width="1.6"/>
+    <rect x="17" y="17" width="766" height="766" rx="87" fill="url(#reflection)" stroke="#7ba8ce" stroke-opacity=".28" stroke-width="1"/>
+    <!-- Original rounded-square P; its counter and stem use the same projected axes. -->
+    <path fill-rule="evenodd" d="M244 171 Q244 157 258 157 H423 C519 157 565 206 565 289 C565 374 516 423 423 423 H342 V609 Q342 623 328 623 H258 Q244 623 244 609 Z M354 246 Q342 246 342 258 V327 Q342 339 354 339 H415 C450 339 468 321 468 292 C468 262 450 246 415 246 Z" fill="url(#ink)" stroke="#d9efff" stroke-opacity=".65" stroke-width="1.5"/>
+    <path d="M102 3 H698 Q797 3 797 102" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="2"/>
+    <path d="M6 699 Q6 794 102 794 H698" fill="none" stroke="#b8f1ff" stroke-opacity=".82" stroke-width="2"/>
+  </g>
+</svg>
