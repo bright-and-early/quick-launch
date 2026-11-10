@@ -26,10 +26,16 @@ public enum ApplicationIndex {
         var apps: [Application] = []
         for root in roots {
             let root = root.standardizedFileURL
-            guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-                options: [.skipsHiddenFiles], errorHandler: { _, _ in true }) else { continue }
+            guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey],
+                options: [], errorHandler: { _, _ in true }) else { continue }
             for case let url as URL in enumerator {
-                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey])
+                // macOS marks the Safari.app link hidden. Include application
+                // entries, but never traverse hidden folders or staging apps.
+                if url.lastPathComponent.hasPrefix(".") || (values?.isHidden == true && url.pathExtension.lowercased() != "app") {
+                    enumerator.skipDescendants()
+                    continue
+                }
                 if values?.isSymbolicLink == true {
                     enumerator.skipDescendants()
                     // Safari is an app link into the sealed system Cryptex. Index
