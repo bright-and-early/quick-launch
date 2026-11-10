@@ -152,7 +152,8 @@ let noJournal = SpotlightServices.apply(SpotlightRequest(services: [service], di
 expect(noJournal.first?.succeeded == false && !commands.contains { ["disable", "enable", "bootout"].contains($0[0]) }, "unwritable authoritative before-journal prevents every mutation")
 var beforeJournal: SpotlightService?
 var recordedOutcomes = 0
-let journalled = SpotlightServices.apply(SpotlightRequest(services: [service], disabled: false), run: { args in
+let staleService = SpotlightService(label: service.label, domain: service.domain, loaded: false, disabled: true)
+let journalled = SpotlightServices.apply(SpotlightRequest(services: [staleService], disabled: false), run: { args in
     args[0] == "print-disabled" ? CommandResult(0, "\"\(service.label)\" => false") : CommandResult(0)
 }, beforeChange: { beforeJournal = $0; return true }, saveResult: { _ in recordedOutcomes += 1; return true })
 expect(beforeJournal?.loaded == true && beforeJournal?.disabled == false && recordedOutcomes == 1 && journalled.first?.succeeded == true, "fresh authoritative state and each outcome reach journal hooks")
@@ -164,3 +165,12 @@ _ = SpotlightServices.apply(SpotlightRequest(services: [service, secondService],
 }, saveResult: { _ in false })
 expect(commands.filter { $0[0] == "enable" }.count == 1, "outcome-journal failure stops subsequent service mutations")
 print("PASS: journal failure boundaries; total \(checks)")
+
+let recoveryNow = Date()
+let recoveryDeadline = recoveryNow.addingTimeInterval(120)
+expect(SpotlightOperationRecovery.shouldWait(wrapperFailed: true, deadline: recoveryDeadline, records: [], now: recoveryNow, helperRunning: { _ in false }), "wrapper exit before helper journal remains unknown and busy")
+let startedRecord = SpotlightJournalRecord(phase: "started", pid: 123)
+expect(SpotlightOperationRecovery.shouldWait(wrapperFailed: true, deadline: recoveryDeadline, records: [startedRecord], now: recoveryNow, helperRunning: { $0 == 123 }), "late helper journal keeps recovery busy while helper runs")
+expect(!SpotlightOperationRecovery.shouldWait(wrapperFailed: true, deadline: recoveryDeadline, records: [startedRecord, SpotlightJournalRecord(phase: "complete", pid: 123)], now: recoveryNow, helperRunning: { _ in true }), "durable completion releases recovery")
+expect(!SpotlightOperationRecovery.shouldWait(wrapperFailed: true, deadline: recoveryDeadline, records: [], now: recoveryDeadline.addingTimeInterval(16), helperRunning: { _ in false }), "empty journal releases only after deadline and termination allowance")
+print("PASS: privileged lifecycle recovery; total \(checks)")

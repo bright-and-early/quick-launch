@@ -39,6 +39,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     private var spotlightWindow: SpotlightSettingsWindow?
     public var onHotKeyChange: ((LauncherHotKey) -> String?)?
     public var isRecordingShortcut: Bool { shortcutRecorder.isRecording }
+    public func acceptCurrentShortcut() { shortcutRecorder.cancelRecording() }
     public func reportShortcutError(_ message: String) { configurationMessage.stringValue = message }
     private var projectApplications: [Application] = []
     private var fieldTrailingToProjects: NSLayoutConstraint!

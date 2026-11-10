@@ -1,6 +1,10 @@
 import AppKit
 import QuickLaunchCore
 
+private final class ServiceCheckbox: NSButton {
+    override var allowsVibrancy: Bool { false }
+}
+
 final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let parent: NSWindow
     private let sheet = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 740, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
@@ -63,7 +67,9 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
     func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
         let service = services[row]
         let view = NSView()
-        let checkbox = NSButton(checkboxWithTitle: service.label + " · " + service.domain, target: self, action: #selector(toggleService(_:)))
+        view.wantsLayer = true
+        let checkbox = ServiceCheckbox(checkboxWithTitle: service.label + " · " + service.domain, target: self, action: #selector(toggleService(_:)))
+        checkbox.wantsLayer = true
         checkbox.tag = row; checkbox.state = selected.contains(service.target) ? .on : .off
         checkbox.isEnabled = !busy; checkbox.toolTip = service.target
         let detail = NSTextField(labelWithString: outcomes[service.target] ?? service.state)
@@ -128,14 +134,15 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
             let script = "do shell script \"" + command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\" with administrator privileges"
             let result = SystemCommand.run("/usr/bin/osascript", ["-e", script], timeout: nil)
             var journal = SpotlightJournal.read(request.id)
+            let decoded = try? JSONDecoder().decode([SpotlightChange].self, from: Data(result.output.utf8))
+            let knownNotStarted = journal.isEmpty && (result.error.contains("(-128)") || result.error.contains("NO_CHANGES:"))
             // If the authorization wrapper exits unexpectedly, keep the workflow
             // busy until the helper completes or its process is known to have exited.
-            while let started = journal.first, journal.last?.phase != "complete" {
-                if kill(started.pid, 0) != 0 && errno == ESRCH { break }
+            while SpotlightOperationRecovery.shouldWait(wrapperFailed: !knownNotStarted && (result.status != 0 || decoded == nil), deadline: request.deadline, records: journal, helperRunning: { kill($0, 0) == 0 || errno != ESRCH }) {
+                DispatchQueue.main.async { [weak self] in self?.message.stringValue = "Verifying whether the authorized operation is still running…" }
                 Thread.sleep(forTimeInterval: 0.5)
                 journal = SpotlightJournal.read(request.id)
             }
-            let decoded = try? JSONDecoder().decode([SpotlightChange].self, from: Data(result.output.utf8))
             let changes = decoded ?? (journal.isEmpty ? nil : journal.compactMap(\.change))
             var saveError = ""
             if let changes = changes {

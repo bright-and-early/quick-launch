@@ -7,10 +7,12 @@ if let index = CommandLine.arguments.firstIndex(of: "--spotlight-apply") {
     guard geteuid() == 0, CommandLine.arguments.indices.contains(index + 1),
           let data = Data(base64Encoded: CommandLine.arguments[index + 1]), data.count < 100_000,
           let request = try? JSONDecoder().decode(SpotlightRequest.self, from: data), request.isValid else {
-        fputs("Invalid or unprivileged Spotlight request.\n", stderr); exit(1)
+        fputs("NO_CHANGES: Invalid, expired, or unprivileged Spotlight request.\n", stderr); exit(1)
     }
+    let journal: SpotlightJournal
+    do { journal = try SpotlightJournal(id: request.id) }
+    catch { fputs("NO_CHANGES: Could not start the operation: \(error.localizedDescription)\n", stderr); exit(1) }
     do {
-        let journal = try SpotlightJournal(id: request.id)
         let changes = SpotlightServices.apply(request, run: { arguments in
             let remaining = request.deadline.timeIntervalSinceNow
             guard remaining > 0 else { return CommandResult(-1, "", "Operation deadline reached; no further command issued.") }
@@ -20,7 +22,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--spotlight-apply") {
         FileHandle.standardOutput.write(try JSONEncoder().encode(changes))
         if !completed { fputs("Journal could not be completed: \(journal.error)\n", stderr) }
         exit(completed ? 0 : 1)
-    } catch { fputs("No services changed: \(error.localizedDescription)\n", stderr); exit(1) }
+    } catch { fputs("Results unavailable; inspect the operation journal: \(error.localizedDescription)\n", stderr); exit(1) }
 }
 if CommandLine.arguments.contains("--spotlight-status") {
     let inventory = SpotlightServices.discover(uid: getuid(), run: SystemCommand.launchctl)
@@ -103,7 +105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
             guard let context = context else { return OSStatus(eventNotHandledErr) }
             let delegate = Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue()
-            if !delegate.launcher.isRecordingShortcut { delegate.launcher.toggle() }
+            if delegate.launcher.isRecordingShortcut { delegate.launcher.acceptCurrentShortcut() }
+            else { delegate.launcher.toggle() }
             return noErr
         }, 1, &type, context, &handler)
         let configured = LauncherConfiguration.shared.hotKey

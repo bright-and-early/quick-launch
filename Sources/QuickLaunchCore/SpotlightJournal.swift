@@ -6,6 +6,17 @@ public struct SpotlightJournalRecord: Codable {
     public let pid: Int32
     public let service: SpotlightService?
     public let change: SpotlightChange?
+    public init(phase: String, pid: Int32, service: SpotlightService? = nil, change: SpotlightChange? = nil) { self.phase = phase; self.pid = pid; self.service = service; self.change = change }
+}
+
+public enum SpotlightOperationRecovery {
+    public static func shouldWait(wrapperFailed: Bool, deadline: Date, records: [SpotlightJournalRecord], now: Date = Date(), helperRunning: (Int32) -> Bool) -> Bool {
+        if records.last?.phase == "complete" { return false }
+        if let started = records.first { return helperRunning(started.pid) }
+        // The wrapper can exit between spawning the helper and its first fsync.
+        // Allow the command deadline plus termination grace before assuming it never began.
+        return wrapperFailed && now < deadline.addingTimeInterval(15)
+    }
 }
 
 /// Privileged writes use a fixed, root-owned directory and an exclusive no-follow file.
