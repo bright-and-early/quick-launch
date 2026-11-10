@@ -58,6 +58,10 @@ expect(table.numberOfRows > 0 && table.numberOfRows < 8, "query filtering still 
 expect(table.selectedRow == 0 && scroll.contentView.bounds.minY == 0, "new query resets selection and scroll to top")
 _ = launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
 expect(header.stringValue == "Terminal", "Tab still completes the selected result")
+editor.string = header.stringValue
+editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+_ = launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
+expect((launcher.panel.firstResponder as? ProjectShortcutButton)?.tag == 0, "Tab after a fully completed app name enters project logos")
 header.stringValue = ""
 launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
 expect(!emptyDrag.isHidden && table.numberOfRows > 8, "clearing search restores drag target and full scrollable list")
@@ -211,3 +215,23 @@ let appearance = LauncherAppearance(defaults: appearanceDefaults)
 expect(appearance.highlight == .system, "highlight defaults to the macOS accent")
 appearance.choose(.purple)
 expect(LauncherAppearance(defaults: appearanceDefaults).highlight == .purple, "chosen highlight persists between launches")
+
+_ = launcher.panel.makeFirstResponder(header)
+editor.string = header.stringValue
+editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+_ = launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
+expect((launcher.panel.firstResponder as? ProjectShortcutButton)?.tag == 0, "Tab at search end with no results enters project logos")
+_ = launcher.panel.makeFirstResponder(header)
+editor.setSelectedRange(NSRange(location: 1, length: 0))
+_ = launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
+expect(!(launcher.panel.firstResponder is ProjectShortcutButton), "Tab does not leave unmatched text when the caret is inside it")
+editor.setSelectedRange(NSRange(location: 0, length: 1))
+_ = launcher.control(header, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:)))
+expect(!(launcher.panel.firstResponder is ProjectShortcutButton), "Tab does not leave unmatched selected text")
+content.layoutSubtreeIfNeeded()
+let iconSurface = dragSurfaces.min { $0.frame.width < $1.frame.width }!
+expect(abs(iconSurface.frame.midY - header.frame.midY) < 0.5, "search input and magnifying glass share their vertical center")
+header.stringValue = "Terminal"
+launcher.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: header))
+content.layoutSubtreeIfNeeded()
+captureEvidence(content, name: "typed-search-hidden-native.png")
