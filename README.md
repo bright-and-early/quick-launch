@@ -1,4 +1,6 @@
-# Quick Launch
+# Pane
+
+Formerly Quick Launch. A single glass pane with a bold P is the app icon.
 
 A small native macOS application launcher written in Swift and AppKit. No third-party dependencies, web runtime, Spotlight search queries, or network requests. The default index contains applications only; explicitly added folders can include files and folders.
 
@@ -10,7 +12,7 @@ Press **Right Arrow** with the caret at the end of the search text to focus the 
 
 By default the index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
-The initial app list is alphabetical. Successful opens through Quick Launch are counted locally and saved between launches; the empty search list orders by most opens, then alphabetically. Typed searches keep match relevance first, then use open count and alphabetical order to break ties. Project-logo opens and restores count; hiding a project, cancelled transitions, and failed launches do not. Opens outside Quick Launch are not monitored.
+The initial app list is alphabetical. Successful opens through Pane are counted locally and saved between launches; the empty search list orders by most opens, then alphabetically. Typed searches keep match relevance first, then use open count and alphabetical order to break ties. Project-logo opens and restores count; hiding a project, cancelled transitions, and failed launches do not. Opens outside Pane are not monitored.
 
 The gear after the project logos flips the launcher 180° to its reverse settings face. Choose a highlight color (System accent, Blue, Indigo, Purple, Pink, Coral, Orange, Amber, Lime, Green, Teal, or Cyan); the choice is saved locally and applies to result selection and keyboard-focus accents. **Back to search** flips back without clearing the query. The turn lasts 280 ms; Reduce Motion uses an 80 ms fade. Escape or an outside click dismisses either face, and the next opening starts on search.
 
@@ -34,18 +36,18 @@ Requires macOS 13+ and the Xcode command line tools. On Steven's Mac, use the sh
 /Users/steven/.codex/bin/local-check-queue -- swift run CoreChecks
 /Users/steven/.codex/bin/local-check-queue -- swift run InteractionChecks
 /Users/steven/.codex/bin/local-check-queue -- ./scripts/install.sh
-open "$HOME/Applications/Quick Launch.app"
+open "$HOME/Applications/Pane.app"
 ```
 
 The installer builds an optimized executable from this checkout, creates an ad-hoc signed `.app`, records its source revision, verifies the signature, and checks the copied executable hashes. Local signing supports this Mac; distribution to other Macs needs appropriate signing/notarization.
 
-The app runs in the menu bar until Quit. Login startup is not enabled automatically. If Command–Space is already claimed, the app reports registration failure; release the existing shortcut in System Settings → Keyboard → Keyboard Shortcuts → Spotlight, then reopen Quick Launch. No Accessibility permission or key logging is required for the registered shortcut.
+The app runs in the menu bar until Quit. Login startup is not enabled automatically. If Command–Space is already claimed, the app reports registration failure; release the existing shortcut in System Settings → Keyboard → Keyboard Shortcuts → Spotlight, then reopen Pane. No Accessibility permission or key logging is required for the registered shortcut.
 
 Diagnostic commands on the installed executable:
 
 ```sh
-"$HOME/Applications/Quick Launch.app/Contents/MacOS/QuickLaunch" --benchmark
-"$HOME/Applications/Quick Launch.app/Contents/MacOS/QuickLaunch" --inventory
+"$HOME/Applications/Pane.app/Contents/MacOS/QuickLaunch" --benchmark
+"$HOME/Applications/Pane.app/Contents/MacOS/QuickLaunch" --inventory
 ```
 
 ## Project window transitions
@@ -55,3 +57,11 @@ Project-logo clicks animate an in-memory preview of the app's primary window int
 Transitions last 220 ms and animate layer position, scale and opacity. Reduce Motion uses an 80 ms fade. Escape/outside-click cancels pending capture or motion without activating a project over the app you just selected. Local app builds are ad-hoc signed, so macOS may ask you to re-enable capture permission after an update.
 
 For quiet delivery or startup, launch the installed executable with `--background` (or `open -g ... --args --background`); this registers the shortcut and menu without showing the panel. Reopening an already-visible launcher leaves its query intact.
+
+## Build and compatibility
+
+On macOS with the Swift tools installed, run `./scripts/install.sh` to build and install Pane into `~/Applications`. Run `./scripts/package.sh universal` to package both Intel and Apple Silicon executables into `.build/Pane.app`.
+
+The visible app and bundle name are Pane. The bundle identifier (`dev.woozy.quick-launch`), executable name, preference keys and Spotlight report folders retain their previous names to preserve existing settings, usage counts and permissions. The installer replaces this app's old `~/Applications/Quick Launch.app` after staging and verifying Pane. Public source remains at https://github.com/bright-and-early/quick-launch so existing links continue to work.
+
+The icon master is `Assets/Pane.png`; packaging generates the complete macOS icon set and embeds `Pane.icns`. Distribution builds are ad-hoc signed and not notarized.

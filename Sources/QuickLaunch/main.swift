@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quit Quick Launch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Pane", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
         let editItem = NSMenuItem()
@@ -91,13 +91,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
         launcher = LauncherController()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Quick Launch")
+        item.button?.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Pane")
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Quick Launch", action: #selector(showLauncher), keyEquivalent: "")
+        menu.addItem(withTitle: "Open Pane", action: #selector(showLauncher), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh Applications", action: #selector(refresh), keyEquivalent: "")
         menu.addItem(withTitle: "Enable Window Animations…", action: #selector(enableAnimations), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Quick Launch", action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Pane", action: #selector(quit), keyEquivalent: "q")
         for entry in menu.items { entry.target = self }
         item.menu = menu
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if status == noErr { LauncherConfiguration.shared.setHotKey(value); return nil }
             return "That shortcut is unavailable. Your previous shortcut is still active."
         }
-        NSLog("Quick Launch: event handler=%d; shortcut registration=%d", installStatus, status)
+        NSLog("Pane: event handler=%d; shortcut registration=%d", installStatus, status)
         let backgroundLaunch = CommandLine.arguments.contains("--background")
         if status != noErr || installStatus != noErr {
             launcher.reportShortcutError("\(configured.title) could not be activated. Choose another shortcut or use the menu bar icon.")
@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 let alert = NSAlert()
                 alert.messageText = "The launcher shortcut is unavailable"
-                alert.informativeText = "Choose another shortcut in Quick Launch settings, or release the conflicting shortcut in System Settings. You can open the launcher from its menu bar icon. (Registration: \(status), handler: \(installStatus))"
+                alert.informativeText = "Choose another shortcut in Pane settings, or release the conflicting shortcut in System Settings. You can open the launcher from its menu bar icon. (Registration: \(status), handler: \(installStatus))"
                 alert.addButton(withTitle: "OK")
                 NSApp.activate(ignoringOtherApps: true)
                 alert.runModal()

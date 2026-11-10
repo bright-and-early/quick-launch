@@ -24,7 +24,7 @@ final class SpotlightSettingsWindow: NSObject, NSTableViewDataSource, NSTableVie
         let content = NSVisualEffectView(frame: sheet.contentView!.bounds)
         content.material = .hudWindow; content.blendingMode = .withinWindow; content.state = .active; content.wantsLayer = true
         sheet.contentView = content
-        let impact = NSTextField(wrappingLabelWithString: "Disabling these services affects Spotlight indexing, Finder and app searches, and search suggestions. Quick Launch uses its own index. macOS may refuse changes to protected services. Enabling allows services to load again; it does not start them immediately.")
+        let impact = NSTextField(wrappingLabelWithString: "Disabling these services affects Spotlight indexing, Finder and app searches, and search suggestions. Pane uses its own index. macOS may refuse changes to protected services. Enabling allows services to load again; it does not start them immediately.")
         impact.font = .systemFont(ofSize: 12)
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true

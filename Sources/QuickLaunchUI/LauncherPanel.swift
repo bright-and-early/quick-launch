@@ -89,7 +89,7 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         panel.isMovableByWindowBackground = true
         panel.delegate = self
         panel.onDismiss = { [weak self] in self?.dismiss() }
-        panel.title = "Quick Launch"
+        panel.title = "Pane"
         content.material = .hudWindow
         content.blendingMode = .behindWindow
         content.state = .active

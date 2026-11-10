@@ -1,39 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-swift build -c release
-bundle="$PWD/.build/Quick Launch.app"
-mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
-cp .build/release/QuickLaunch "$bundle/Contents/MacOS/QuickLaunch"
-cat > "$bundle/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>dev.woozy.quick-launch</string>
-<key>CFBundleName</key><string>Quick Launch</string>
-<key>CFBundleDisplayName</key><string>Quick Launch</string>
-<key>CFBundleExecutable</key><string>QuickLaunch</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.0</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>LSMinimumSystemVersion</key><string>13.0</string>
-<key>LSUIElement</key><true/>
-<key>NSPrincipalClass</key><string>QuickLaunchApplication</string>
-<key>NSHighResolutionCapable</key><true/>
-</dict></plist>
-PLIST
-revision="$(git rev-parse HEAD)"
-printf '%s\n' "$revision" > "$bundle/Contents/Resources/source-revision.txt"
-codesign --force --sign - "$bundle"
-# Installer always builds this checkout before replacing the exact destination.
-destination="$HOME/Applications/Quick Launch.app"
-if pgrep -f '/Quick Launch.app/Contents/MacOS/QuickLaunch$' >/dev/null; then
-    echo 'Quit Quick Launch before installing a new revision.' >&2
+./scripts/package.sh
+# Do not replace a running launcher or its privileged helper.
+if pgrep -f '/(Pane|Quick Launch)\.app/Contents/MacOS/QuickLaunch( |$)' >/dev/null; then
+    echo 'Quit Pane (formerly Quick Launch) before installing a new revision.' >&2
     exit 1
 fi
 mkdir -p "$HOME/Applications"
-rm -rf "$destination"
-ditto "$bundle" "$destination"
-codesign --verify --strict "$destination"
+staging="$(mktemp -d "$HOME/Applications/.Pane-install.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
+bundle="$PWD/.build/Pane.app"
+destination="$HOME/Applications/Pane.app"
+ditto "$bundle" "$staging/Pane.app"
+codesign --verify --strict "$staging/Pane.app"
+cmp "$bundle/Contents/Resources/source-revision.txt" "$staging/Pane.app/Contents/Resources/source-revision.txt"
+if [[ -e "$destination" ]]; then
+    if [[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$destination/Contents/Info.plist" 2>/dev/null || true)" != dev.woozy.quick-launch ]]; then
+        echo 'A different app already exists at ~/Applications/Pane.app; leaving it unchanged.' >&2
+        exit 1
+    fi
+    mv "$destination" "$staging/Previous.app"
+fi
+if ! mv "$staging/Pane.app" "$destination"; then
+    if [[ -e "$staging/Previous.app" ]]; then mv "$staging/Previous.app" "$destination"; fi
+    exit 1
+fi
+legacy="$HOME/Applications/Quick Launch.app"
+if [[ -d "$legacy" ]] && [[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$legacy/Contents/Info.plist" 2>/dev/null || true)" == dev.woozy.quick-launch ]]; then
+    mv "$legacy" "$staging/Quick Launch.app"
+fi
 shasum -a 256 "$bundle/Contents/MacOS/QuickLaunch" "$destination/Contents/MacOS/QuickLaunch"
-echo "Installed $destination ($revision)"
+echo "Installed $destination ($(cat "$destination/Contents/Resources/source-revision.txt"))"
