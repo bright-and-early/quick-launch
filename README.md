@@ -4,6 +4,8 @@ A small native macOS application launcher written in Swift and AppKit. No third-
 
 Press **Command–Space**, type an application name or abbreviation, then press **Return**. **Tab** completes the selected suggestion, **↑/↓** changes the selection, and **Escape** dismisses the panel. Drag the window by its background to reposition it. Click the menu bar magnifying glass to open the launcher or quit.
 
+The search row also shows one-click logos for AppLab, Atlas, Gimme Job, Matterlab, and Menagerie when installed in `~/Applications`. Hover a logo to identify it; clicking opens that installed app through the same launch flow as a search result.
+
 The index reads app bundles only under `/Applications`, `/System/Applications`, and `~/Applications`, including Utilities. It skips dot-prefixed entries, hidden non-app folders, symlinked folders, and the contents of app bundles. Application links such as Safari are included without scanning their destination folders. It refreshes in the background on first launch and, when opened, after the previous scan is at least 30 seconds old. Searching uses precomputed normalized names in memory; scanning never runs on the main thread. App icons are cached lazily.
 
 ## Build and install
