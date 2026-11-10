@@ -326,6 +326,9 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
     }
 
     private func updateProjectShortcuts() {
+        let focusedURL = (panel.firstResponder as? ProjectShortcutButton).flatMap { button in
+            projectApplications.indices.contains(button.tag) ? projectApplications[button.tag].url : nil
+        }
         for button in projectButtons.arrangedSubviews {
             projectButtons.removeArrangedSubview(button)
             button.removeFromSuperview()
@@ -350,13 +353,22 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         fieldTrailingToEdge.isActive = !hasProjects
         fieldTrailingToProjects.isActive = hasProjects
         projectButtons.isHidden = !hasProjects
+        if let focusedURL = focusedURL {
+            if let index = projectApplications.firstIndex(where: { $0.url == focusedURL }) {
+                panel.makeFirstResponder(projectButtons.arrangedSubviews[index])
+            } else { focusSearch() }
+        }
+    }
+
+    private func focusSearch() {
+        panel.makeFirstResponder(field)
+        field.currentEditor()?.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0)
     }
 
     private func moveProjectFocus(from index: Int, by offset: Int, tab: Bool) {
         let next = index + offset
         if next < 0 || (tab && next >= projectButtons.arrangedSubviews.count) {
-            panel.makeFirstResponder(field)
-            field.currentEditor()?.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0)
+            focusSearch()
         } else if projectButtons.arrangedSubviews.indices.contains(next) {
             panel.makeFirstResponder(projectButtons.arrangedSubviews[next])
         }

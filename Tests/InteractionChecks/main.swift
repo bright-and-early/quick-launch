@@ -132,3 +132,16 @@ let actionButton = ProjectShortcutButton(title: "", target: actionSpy, action: #
 actionButton.keyDown(with: projectKey(36))
 actionButton.keyDown(with: projectKey(49))
 expect(actionSpy.activations == 2, "Return and Space activate the focused project without using any real application")
+
+_ = launcher.panel.makeFirstResponder(projectLogos[1])
+let focusedProjectName = projectLogos[1].toolTip
+launcher.refreshIndex(force: true)
+let refreshDeadline = Date().addingTimeInterval(10)
+while projectLogos[1].superview != nil && Date() < refreshDeadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+}
+expect(projectLogos[1].superview == nil && (launcher.panel.firstResponder as? ProjectShortcutButton)?.toolTip == focusedProjectName,
+       "background index refresh preserves keyboard focus on the same project")
+let refreshedLogo = launcher.panel.firstResponder as! ProjectShortcutButton
+refreshedLogo.keyDown(with: projectKey(123))
+expect((launcher.panel.firstResponder as? ProjectShortcutButton)?.tag == 0, "logo arrow navigation continues after background refresh")
