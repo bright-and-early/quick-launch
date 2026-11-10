@@ -62,10 +62,12 @@ public final class LauncherController: NSObject, NSTextFieldDelegate, NSWindowDe
         field.setAccessibilityLabel("Search applications")
         field.delegate = self
         content.addSubview(field)
+        emptySearchDrag.wantsLayer = true
         emptySearchDrag.focusField = field
         emptySearchDrag.translatesAutoresizingMaskIntoConstraints = false
         emptySearchDrag.setAccessibilityElement(false)
         content.addSubview(emptySearchDrag)
+        iconDrag.wantsLayer = true
         iconDrag.focusField = field
         iconDrag.translatesAutoresizingMaskIntoConstraints = false
         iconDrag.setAccessibilityElement(false)
