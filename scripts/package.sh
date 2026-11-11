@@ -32,8 +32,8 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>Pane</string>
 <key>CFBundleExecutable</key><string>QuickLaunch</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.6.1</string>
-<key>CFBundleVersion</key><string>17</string>
+<key>CFBundleShortVersionString</key><string>1.6.2</string>
+<key>CFBundleVersion</key><string>18</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSPrincipalClass</key><string>QuickLaunchApplication</string>

@@ -8,7 +8,47 @@ func expect(_ value: @autoclosure () -> Bool, _ message: String) {
     print("PASS: \(message)")
 }
 func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+// Export the complete native hierarchy so AppKit resolves vibrancy correctly.
+// The offscreen opaque material fallback gets alpha for website compositing.
+// Controls and high-contrast text retain their captured pixels and opacity.
+func captureTransparentEvidence(_ view: NSView, name: String) {
+    guard let directory = ProcessInfo.processInfo.environment["QUICK_LAUNCH_TRANSPARENT_EVIDENCE_DIR"],
+          ["typed-search-hidden-native.png", "configuration-hidden-native.png"].contains(name),
+          let native = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+    view.cacheDisplay(in: view.bounds, to: native)
+    let output = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: native.pixelsWide,
+        pixelsHigh: native.pixelsHigh, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    output.size = native.size
+    guard let image = native.cgImage, let pixels = output.bitmapData,
+          let context = CGContext(data: pixels, width: output.pixelsWide, height: output.pixelsHigh,
+              bitsPerComponent: 8, bytesPerRow: output.bytesPerRow,
+              space: CGColorSpaceCreateDeviceRGB(),
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: output.pixelsWide, height: output.pixelsHigh))
+    // Sample the empty lower material, clear of controls and rounded edges.
+    let sample = (output.pixelsHigh - 12) * output.bytesPerRow + (output.pixelsWide / 2) * 4
+    let backdrop = (0..<3).map { Double(pixels[sample + $0]) / max(1, Double(pixels[sample + 3])) }
+    for y in 0..<output.pixelsHigh {
+        for x in 0..<output.pixelsWide {
+            let offset = y * output.bytesPerRow + x * 4
+            let alpha = Double(pixels[offset + 3])
+            guard alpha > 0 else { continue }
+            let difference = (0..<3).map { abs(Double(pixels[offset + $0]) / alpha - backdrop[$0]) }.max()!
+            let opacity = 0.56 + 0.44 * min(1, difference / 0.2)
+            for channel in 0..<4 {
+                pixels[offset + channel] = UInt8((Double(pixels[offset + channel]) * opacity).rounded())
+            }
+        }
+    }
+    expect(pixels[sample + 3] > 0 && pixels[sample + 3] < 255,
+        "translucent export retains a partially transparent material")
+    let destination = URL(fileURLWithPath: directory).appendingPathComponent(name)
+    try! FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try! output.representation(using: .png, properties: [:])!.write(to: destination)
+}
 func captureEvidence(_ view: NSView, name: String) {
+    captureTransparentEvidence(view, name: name)
     guard let directory = ProcessInfo.processInfo.environment["QUICK_LAUNCH_EVIDENCE_DIR"],
           let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
     view.cacheDisplay(in: view.bounds, to: bitmap)

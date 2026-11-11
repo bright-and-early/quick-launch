@@ -64,4 +64,13 @@ On macOS with the Swift tools installed, run `./scripts/install.sh` to build and
 
 The visible app and bundle name are Pane. The bundle identifier (`dev.woozy.quick-launch`), executable name, preference keys and Spotlight report folders retain their previous names to preserve existing settings, usage counts and permissions. The installer replaces this app's old `~/Applications/Quick Launch.app` after staging and verifying Pane. Public source remains at https://github.com/bright-and-early/quick-launch so existing links continue to work.
 
-The editable icon is `Assets/Pane.svg`; the pane and custom P share one perspective transform. `Assets/Pane.png` is its production raster; packaging generates the complete macOS icon set and embeds `Pane.icns`. Distribution builds are ad-hoc signed and not notarized.
+The editable icon is `Assets/Pane.svg`; the frosted P, beveled pane, and mint/lilac highlights share one perspective transform. `Assets/Pane.png` is its production raster; packaging generates the complete macOS icon set and embeds `Pane.icns`. Distribution builds are ad-hoc signed and not notarized.
+
+
+To export the native search and settings controls for a translucent website presentation without showing a window:
+
+```sh
+QUICK_LAUNCH_TRANSPARENT_EVIDENCE_DIR=.build/evidence/pane-translucent /Users/steven/.codex/bin/local-check-queue -- swift run InteractionChecks
+```
+
+These captures use the actual AppKit view hierarchy. The exporter gives the opaque offscreen material fallback an alpha channel while preserving high-contrast text and icons. They are presentation exports, and macOS resolves the live panel’s backdrop against the windows behind it.
